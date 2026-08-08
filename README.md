@@ -13,6 +13,8 @@
 - Added project open actions and focused project dashboards.
 - Standardized status and tag capitalization.
 - Added persistent contextual feedback capture: right-click outside form controls to attach a note, page, URL, viewport, and timestamp.
+- Enabled persistent creation, state changes, revision tracking, and deletion across all construction workflows, including proposals, contractors, solicitations, and scope reviews.
+- Made company and per-tool settings persistent and connected the private Godmode metrics to live environment data.
 
 ## Foundation release
 

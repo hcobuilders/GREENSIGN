@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
+import { Link, NavLink, useFetcher, useLoaderData, useLocation, useNavigate } from "react-router";
 import { Dashboard } from "../components/dashboard";
 import { ProjectsPage } from "../components/projects-page";
 import { ToolPage } from "../components/tool-page";
 import { bulkUpdateProjects, createProject, deleteProjects, listProjects, updateProject } from "../lib/projects.server";
 import { globalLinks, modules, settingsLinks } from "../lib/navigation";
 import { createFeedback, listFeedback } from "../lib/feedback.server";
+import { createWorkflowRecord, deleteWorkflowRecord, getCompany, listToolConfigurations, listWorkflowRecords, setToolEnabled, updateCompanySettings, updateWorkflowRecord } from "../lib/workflows.server";
 import type { Route } from "./+types/application";
 
 export function meta(): Route.MetaDescriptors { return [{title:"GREENSIGN — Construction Intelligence"}]; }
-export async function loader() { return {projects:await listProjects(),feedback:await listFeedback()}; }
+export async function loader() { return {projects:await listProjects(),feedback:await listFeedback(),records:await listWorkflowRecords(),configurations:await listToolConfigurations(),company:await getCompany()}; }
 export async function action({request}:Route.ActionArgs) {
   const form=await request.formData(); const intent=String(form.get("intent")??"");
   if(intent==="update") await updateProject(String(form.get("id")),String(form.get("field")),String(form.get("value")??"")||null);
@@ -17,6 +18,11 @@ export async function action({request}:Route.ActionArgs) {
   else if(intent==="delete") await deleteProjects(parseIds(form.get("ids")));
   else if(intent==="create") await createProject();
   else if(intent==="feedback") await createFeedback(String(form.get("note")??""),String(form.get("page")??""),JSON.parse(String(form.get("context")??"{}")));
+  else if(intent==="workflow-create") await createWorkflowRecord(String(form.get("toolKey")),String(form.get("type")??"item"),String(form.get("projectId")??"")||null,{title:String(form.get("title")??"Untitled"),detail:String(form.get("detail")??"")});
+  else if(intent==="workflow-update") await updateWorkflowRecord(String(form.get("id")),String(form.get("state")??"draft"),{title:String(form.get("title")??"Untitled"),detail:String(form.get("detail")??"")});
+  else if(intent==="workflow-delete") await deleteWorkflowRecord(String(form.get("id")));
+  else if(intent==="tool-toggle") await setToolEnabled(String(form.get("toolKey")),String(form.get("enabled"))==="true");
+  else if(intent==="company-setting") await updateCompanySettings(String(form.get("key")),String(form.get("value")??""));
   else throw new Response("Unsupported project action",{status:400});
   return {ok:true};
 }
@@ -37,9 +43,11 @@ const commandRoutes:Record<string,string>={"/dashboard":"dashboard","/projects":
 const commands=[...Object.keys(commandRoutes),"/new-project","/quick-add","/new-proposal","/new-contractor","/new-solicitation","/commands"];
 
 function Settings({section,toolSlug}:{section?:string;toolSlug?:string}) {
+  const fetcher=useFetcher();const data=useLoaderData<{configurations:{toolKey:string;enabled:boolean}[];company:{settings:unknown}}>();
   const tool=modules.find(item=>item[0]===toolSlug); const title=tool?`${tool[2]} setup`:settingsLinks.find(item=>item[0]===section)?.[1]??"Account info";
   const rows=tool?[["Enable tool","Make this module available in the current company environment"],["Tool setup","Define defaults, stages, ownership and workflow rules"],["Templates","Create and manage approved reusable templates"],["Field maps","Map standardized inputs and outputs between modules"],["Connectors","Configure external workflow and storage connections"],["Confirmation guardrails","Require approval before parsed data is committed"]]:settingsRows[section??"account"]??settingsRows.account;
-  return <div className="settings-grid"><nav className="settings-nav">{settingsLinks.map(item=><NavLink key={item[0]} to={`/app/settings/${item[0]}`}>{item[1]}</NavLink>)}<div className="settings-label">TOOL SETTINGS</div>{modules.map(item=><NavLink key={item[0]} to={`/app/settings/tools/${item[0]}`}>{item[2]}</NavLink>)}</nav><section className="settings-card"><div className="panel-head"><div><h2>{title}</h2><span className="panel-caption">Company environment configuration</span></div></div>{rows.map((row,index)=><div className="setting-row" key={row[0]}><div><b>{row[0]}</b><span>{row[1]}</span></div><button className={`toggle ${index<2?"on":""}`} aria-label={`Toggle ${row[0]}`}/></div>)}</section></div>;
+  const companySettings=(data.company.settings??{}) as Record<string,unknown>;const enabled=toolSlug?data.configurations.find(item=>item.toolKey===toolSlug)?.enabled??false:false;
+  return <div className="settings-grid"><nav className="settings-nav">{settingsLinks.map(item=><NavLink key={item[0]} to={`/app/settings/${item[0]}`}>{item[1]}</NavLink>)}<div className="settings-label">TOOL SETTINGS</div>{modules.map(item=><NavLink key={item[0]} to={`/app/settings/tools/${item[0]}`}>{item[2]}</NavLink>)}</nav><section className="settings-card"><div className="panel-head"><div><h2>{title}</h2><span className="panel-caption">Company environment configuration · changes save immediately</span></div></div>{rows.map((row,index)=>{const key=toolSlug?`${toolSlug}:${index}`:`${section??"account"}:${index}`;const saved=companySettings[key];const on=toolSlug&&index===0?enabled:saved===true||saved==="true";return <div className="setting-row" key={row[0]}><div><b>{row[0]}</b><span>{row[1]}</span></div><button className={`toggle ${on?"on":""}`} aria-pressed={on} aria-label={`Toggle ${row[0]}`} onClick={()=>toolSlug&&index===0?fetcher.submit({intent:"tool-toggle",toolKey:toolSlug,enabled:String(!on)},{method:"post"}):fetcher.submit({intent:"company-setting",key,value:String(!on)},{method:"post"})}/></div>;})}</section></div>;
 }
 const settingsRows:Record<string,string[][]>={
   account:[["Profile information","Name, email and personal preferences"],["Security","Password, sessions and future OAuth connections"],["Notifications","Workflow assignments and deadline alerts"],["Appearance","Environment typeface and density"]],
@@ -57,7 +65,7 @@ function MenuPopover({close}:{close:()=>void}) {
 
 function AccountPopover({close}:{close:()=>void}) {return <div className="account-popover"><div className="account-heading"><b>R. GREEN</b><span>HCO Builders · Administrator</span></div>{settingsLinks.map(item=><Link key={item[0]} onClick={close} to={`/app/settings/${item[0]}`}>{item[1]}</Link>)}</div>;}
 
-function GodMode({confirm}:{confirm:(value:string)=>void}) {return <div className="module-grid">{["Company environments","Admin accounts","Module assignments","Instance domains","Feature flags","Audit controls"].map(item=><article className="module-card" key={item}><span className="number">PRIVATE CONTROL</span><h3>{item}</h3><p>Environment-level configuration protected from standard navigation.</p><button className="secondary" onClick={()=>confirm(item)}>MANAGE</button></article>)}</div>;}
+function GodMode({confirm}:{confirm:(value:string)=>void}) {const data=useLoaderData<{company:{name:string;slug:string;status:string};configurations:{enabled:boolean}[];records:unknown[];feedback:unknown[]}>();const cards=[["Company environment",`${data.company.name} · ${data.company.status}`],["Module assignments",`${data.configurations.filter(item=>item.enabled).length} enabled tools`],["Workflow records",`${data.records.length} persistent records`],["Instance domain",`${data.company.slug}.greensign.app`],["Feature flags","Company and tool controls connected"],["Feedback audit",`${data.feedback.length} captured items`]];return <div className="module-grid">{cards.map(item=><article className="module-card" key={item[0]}><span className="number">PRIVATE CONTROL</span><h3>{item[0]}</h3><p>{item[1]}</p><button className="secondary" onClick={()=>confirm(`Manage ${item[0]}`)}>MANAGE</button></article>)}</div>;}
 
 export default function Application({loaderData}:Route.ComponentProps) {
   const location=useLocation(),navigate=useNavigate(),commandRef=useRef<HTMLInputElement>(null); const base=location.pathname.startsWith("/mockup")?"/mockup":"/app"; const path=location.pathname.replace(/^\/(?:app|mockup)\/?/,"").split("/").filter(Boolean); const [menuOpen,setMenuOpen]=useState(false); const [accountOpen,setAccountOpen]=useState(false); const [dialog,setDialog]=useState<string>(); const [command,setCommand]=useState(""); const [commandActive,setCommandActive]=useState(false); const [commandTip,setCommandTip]=useState<string>(); const [feedbackPoint,setFeedbackPoint]=useState<{x:number;y:number}>(); const [godMode,setGodMode]=useState(false);
