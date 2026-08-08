@@ -15,6 +15,13 @@
       "when": 1786214782735,
       "tag": "0001_glossy_secret_warriors",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786217398408,
+      "tag": "0002_third_wolfpack",
+      "breakpoints": true
     }
   ]
 }

@@ -16,10 +16,14 @@ COPY --from=development-dependencies-env /app/node_modules ./node_modules
 RUN pnpm build
 
 FROM base
+ARG APP_VERSION=0.3.0
+ARG BUILD_DATE=unknown
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --from=production-dependencies-env /app/node_modules ./node_modules
 COPY --from=build-env /app/build ./build
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV APP_VERSION=$APP_VERSION
+ENV BUILD_DATE=$BUILD_DATE
 EXPOSE 3000
 CMD ["pnpm", "start"]

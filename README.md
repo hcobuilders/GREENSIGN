@@ -6,6 +6,17 @@
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
 
+## v0.3.0 responsive command and feedback
+
+- Added a legible responsive type and spacing scale for 1080p, 4K, tablet, and compact viewports.
+- Expanded the global command bar with one-key slash entry, Escape-to-exit, active high-visibility styling, autocomplete, five-second inline error tips, command discovery, and natural-language project navigation.
+- Added `/ver` runtime diagnostics for version, build timestamp, server/database health, environment, route, and viewport.
+- Added project open actions and focused project dashboards.
+- Standardized status and tag capitalization.
+- Added persistent contextual feedback capture: right-click outside form controls to attach a note, page, URL, viewport, and timestamp.
+- Enabled persistent creation, state changes, revision tracking, and deletion across all construction workflows, including proposals, contractors, solicitations, and scope reviews.
+- Made company and per-tool settings persistent and connected the private Godmode metrics to live environment data.
+
 ## Foundation release
 
 This is the first production-oriented GREENSIGN foundation. It converts the approved interactive mockup into a server-rendered React application with real URLs, a multi-company PostgreSQL schema, local Docker services, and Railway-ready packaging.
