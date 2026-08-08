@@ -10,6 +10,7 @@
 
 - Added a legible responsive type and spacing scale for 1080p, 4K, tablet, and compact viewports.
 - Expanded the global command bar with one-key slash entry, Escape-to-exit, active high-visibility styling, autocomplete, five-second inline error tips, command discovery, and natural-language project navigation.
+- Added `/ver` runtime diagnostics for version, build timestamp, server/database health, environment, route, and viewport.
 - Added project open actions and focused project dashboards.
 - Standardized status and tag capitalization.
 - Added persistent contextual feedback capture: right-click outside form controls to attach a note, page, URL, viewport, and timestamp.
