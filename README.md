@@ -2,7 +2,7 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.1.0--foundation-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.2.0--interface-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
 
@@ -13,6 +13,15 @@ This is the first production-oriented GREENSIGN foundation. It converts the appr
 The visible workflows intentionally do **not** create records in this release. Every action reaches a confirmation endpoint and ends with **OK**, allowing product structure and navigation to be validated before persistent behavior is enabled.
 
 The approved interactive presentation remains available at `/mockup`. The application opens at `/app/dashboard`.
+
+## v0.2.0 interface rebuild
+
+- Restored the final top-navigation design and removed the duplicated persistent sidebar.
+- Split construction tools and account settings into focused header popovers.
+- Rebuilt Projects as a functional PostgreSQL-backed table with search, filters, select-all, bulk status changes, bulk deletion, inline text/status editing, and calendar date inputs.
+- Restored distinct workflow steps, metrics, working tables, intelligence panels, and actions for every construction tool.
+- Fixed global commands, including `/projects`, tool shortcuts, settings navigation, and private `/gm_RH` access.
+- Kept Quick Add exclusively in the top bar and styled the command `RUN` control as plain green text.
 
 ### Included surfaces
 

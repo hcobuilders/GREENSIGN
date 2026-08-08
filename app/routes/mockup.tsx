@@ -1,1 +1,1 @@
-export { default, meta } from "./application";
+export { action, default, loader, meta } from "./application";

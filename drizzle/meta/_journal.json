@@ -8,6 +8,13 @@
       "when": 1786210769082,
       "tag": "0000_rich_deadpool",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786214782735,
+      "tag": "0001_glossy_secret_warriors",
+      "breakpoints": true
     }
   ]
 }
