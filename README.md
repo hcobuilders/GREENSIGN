@@ -2,7 +2,7 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.2.0--interface-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.4.0-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
 
@@ -16,6 +16,14 @@
 - Added persistent contextual feedback capture: right-click outside form controls to attach a note, page, URL, viewport, and timestamp.
 - Enabled persistent creation, state changes, revision tracking, and deletion across all construction workflows, including proposals, contractors, solicitations, and scope reviews.
 - Made company and per-tool settings persistent and connected the private Godmode metrics to live environment data.
+
+## v0.4.0 flagged feedback
+
+- Restored full-width layouts at every desktop resolution while retaining fluid type scaling.
+- Added JSON/CSV project import from the dashboard New action.
+- Added persistent View and Approve controls to dashboard activity items.
+- Scoped construction tool navigation and commands to an open project.
+- Reset and unfocus the command bar immediately after successful commands.
 
 ## Foundation release
 
