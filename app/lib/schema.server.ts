@@ -33,3 +33,13 @@ export const feedbackItems = pgTable("feedback_items", {
   status: text("status").notNull().default("flagged"),
   createdAt: timestamp("created_at",{withTimezone:true}).defaultNow().notNull(),
 },t=>[index("feedback_company_idx").on(t.companyId,t.status,t.createdAt)]);
+export const layoutVersions = pgTable("layout_versions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  family: text("family").notNull().default("GREENSIGN Default"),
+  version: integer("version").notNull().default(1),
+  status: text("status").notNull().default("draft"),
+  configuration: jsonb("configuration").notNull().default({}),
+  notes: text("notes").notNull().default(""),
+  parentId: uuid("parent_id"),
+  createdAt: timestamp("created_at",{withTimezone:true}).defaultNow().notNull(),
+},t=>[index("layout_family_idx").on(t.family,t.version),index("layout_status_idx").on(t.status)]);
