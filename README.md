@@ -2,9 +2,18 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.4.0-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.5.0-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
+
+## v0.5.0 project operating system
+
+- Rebuilt every open project as a responsive, full-width operating workspace with persistent project tools, a unified overview, and a detailed information/coverage pane.
+- Reworked dashboard project cards around bid signals, dates, values, and direct project/file actions; metrics now open navigable detail drawers and approved actions leave the queue.
+- Changed manual project creation to a confirmation-first drawer that writes only on Create Project and opens the new workspace immediately.
+- Added working cross-project Data, trade-partner Network, Feedback Audit, and connected Godmode destinations.
+- Made all environment and tool settings editable and persistent without a scrolling navigation trap.
+- Expanded global commands to cover every construction tool and its create action while preserving natural-language project navigation, `/ver`, one-key slash focus, Escape exit, and non-blocking feedback.
 
 ## v0.3.0 responsive command and feedback
 
@@ -90,4 +99,4 @@ GREENSIGN uses sequential release branches. Each new approved product version st
 
 ## Current boundary
 
-Authentication, OAuth providers, database writes, email delivery, document generation, external connectors, and Railway deployment are deliberately deferred. They will be enabled only after the foundation model is approved for production testing.
+Authentication, OAuth providers, email delivery, document generation, external connectors, and Railway deployment remain deferred. Project, workflow, settings, feedback, and company-environment writes are PostgreSQL-backed in the current operating build.
