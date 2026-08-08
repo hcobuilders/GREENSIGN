@@ -45,10 +45,11 @@ export async function deleteProjects(ids:string[]) {
   await db.delete(projects).where(and(eq(projects.companyId,company.id),inArray(projects.id,ids)));
 }
 
-export async function createProject() {
+export async function createProject(input?:Record<string,string>) {
   const db=getDatabase(); const company=await ensureFoundationCompany();
-  const code=`NEW-${String(Date.now()).slice(-4)}`;
-  await db.insert(projects).values({companyId:company.id,code,name:"Untitled project",status:"planning",phase:"preconstruction",owner:"Unassigned"});
+  const code=input?.code?.trim()||`NEW-${String(Date.now()).slice(-4)}`;
+  const inserted=await db.insert(projects).values({companyId:company.id,code,name:input?.name?.trim()||"Untitled project",status:input?.status||"planning",phase:input?.phase?.trim()||"preconstruction",owner:input?.owner?.trim()||"Unassigned",startDate:input?.startDate||null,dueDate:input?.dueDate||null,completionDate:input?.completionDate||null,data:{location:input?.location||"",projectOwner:input?.projectOwner||"",architect:input?.architect||"",description:input?.description||"",sizeSf:Number(input?.sizeSf||0),anticipatedValue:Number(input?.anticipatedValue||0),estimatedValue:Number(input?.estimatedValue||0),proposedValue:Number(input?.proposedValue||0)}}).returning();
+  return inserted[0];
 }
 
 export async function createProjectsFromUpload(file:File) {
