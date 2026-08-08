@@ -24,3 +24,12 @@ export const toolConfigurations = pgTable("tool_configurations", { id: uuid("id"
 export const workflowRecords = pgTable("workflow_records", { id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").references(()=>companies.id,{onDelete:"cascade"}).notNull(), projectId: uuid("project_id").references(()=>projects.id,{onDelete:"cascade"}), toolKey: text("tool_key").notNull(), type: text("type").notNull(), state: text("state").notNull().default("draft"), revision: integer("revision").notNull().default(1), payload: jsonb("payload").notNull().default({}), createdAt: timestamp("created_at",{withTimezone:true}).defaultNow().notNull() },t=>[index("workflow_project_idx").on(t.projectId),index("workflow_tool_idx").on(t.companyId,t.toolKey)]);
 export const fileReferences = pgTable("file_references", { id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").references(()=>companies.id,{onDelete:"cascade"}).notNull(), projectId: uuid("project_id").references(()=>projects.id,{onDelete:"cascade"}), provider: text("provider").notNull(), externalId: text("external_id").notNull(), displayName: text("display_name").notNull(), metadata: jsonb("metadata").notNull().default({}) });
 export const auditEvents = pgTable("audit_events", { id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").references(()=>companies.id,{onDelete:"cascade"}), actorId: uuid("actor_id").references(()=>users.id), action: text("action").notNull(), targetType: text("target_type").notNull(), targetId: text("target_id"), detail: jsonb("detail").notNull().default({}), createdAt: timestamp("created_at",{withTimezone:true}).defaultNow().notNull() },t=>[index("audit_company_idx").on(t.companyId,t.createdAt)]);
+export const feedbackItems = pgTable("feedback_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyId: uuid("company_id").references(()=>companies.id,{onDelete:"cascade"}).notNull(),
+  note: text("note").notNull(),
+  page: text("page").notNull(),
+  context: jsonb("context").notNull().default({}),
+  status: text("status").notNull().default("flagged"),
+  createdAt: timestamp("created_at",{withTimezone:true}).defaultNow().notNull(),
+},t=>[index("feedback_company_idx").on(t.companyId,t.status,t.createdAt)]);
