@@ -51,6 +51,7 @@ export async function createProject(input?:Record<string,string>) {
   const inserted=await db.insert(projects).values({companyId:company.id,code,name:input?.name?.trim()||"Untitled project",status:input?.status||"planning",phase:input?.phase?.trim()||"preconstruction",owner:input?.owner?.trim()||"Unassigned",startDate:input?.startDate||null,dueDate:input?.dueDate||null,completionDate:input?.completionDate||null,data:{location:input?.location||"",projectOwner:input?.projectOwner||"",architect:input?.architect||"",description:input?.description||"",sizeSf:Number(input?.sizeSf||0),anticipatedValue:Number(input?.anticipatedValue||0),estimatedValue:Number(input?.estimatedValue||0),proposedValue:Number(input?.proposedValue||0)}}).returning();
   return inserted[0];
 }
+export async function updateProjectData(id:string,patch:Record<string,unknown>){const db=getDatabase(),company=await ensureFoundationCompany();const [current]=await db.select().from(projects).where(and(eq(projects.id,id),eq(projects.companyId,company.id))).limit(1);if(!current)throw new Response("Project not found",{status:404});await db.update(projects).set({data:{...((current.data??{}) as Record<string,unknown>),...patch},updatedAt:new Date()}).where(eq(projects.id,id));}
 
 export async function createProjectsFromUpload(file:File) {
   const text=await file.text();let rows:Record<string,unknown>[]=[];

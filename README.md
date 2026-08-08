@@ -2,9 +2,18 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.5.0-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.6.0-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
+
+## v0.6.0 Godmode layout studio
+
+- Separated private Godmode from every operating environment with its own route, navigation, loader, actions, and interface language.
+- Added a PostgreSQL-backed layout studio for global colors, typography, scale, density, geometry, application frames, dashboard columns, and per-tool workspace layouts.
+- Every layout save creates an immutable version with Preview, Activate, Duplicate, and Restore-as-New controls for safe experimentation and rollback.
+- Rebuilt project overview information into one production command center with latest estimate/proposal access and bidding-package actions.
+- Added editable project leads, editable workflow tables, real column filters, CSV imports/templates, a complete procurement schema with automatic late-order risk, and working workspace-intelligence actions.
+- Made dashboard cards editable, status-aware, color-configurable, menu-driven, and reorderable by drag and drop.
 
 ## v0.5.0 project operating system
 

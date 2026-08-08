@@ -1,0 +1,14 @@
+import { asc, desc, eq, max } from "drizzle-orm";
+import { getDatabase } from "./db.server";
+import { companies, layoutVersions } from "./schema.server";
+import { defaultLayout, normalizeLayout, type LayoutConfiguration } from "./layout-config";
+
+async function ensureDefault(){const db=getDatabase();const rows=await db.select().from(layoutVersions).orderBy(asc(layoutVersions.createdAt)).limit(1);if(rows[0])return rows[0];const [created]=await db.insert(layoutVersions).values({family:"GREENSIGN Default",version:1,status:"active",configuration:defaultLayout,notes:"Foundation layout"}).returning();return created;}
+export async function listLayouts(){await ensureDefault();return getDatabase().select().from(layoutVersions).orderBy(desc(layoutVersions.createdAt));}
+export async function getLayout(id?:string|null){const db=getDatabase();await ensureDefault();if(id){const [selected]=await db.select().from(layoutVersions).where(eq(layoutVersions.id,id)).limit(1);if(selected)return {...selected,configuration:normalizeLayout(selected.configuration)};}const [active]=await db.select().from(layoutVersions).where(eq(layoutVersions.status,"active")).orderBy(desc(layoutVersions.createdAt)).limit(1);const fallback=active??await ensureDefault();return {...fallback,configuration:normalizeLayout(fallback.configuration)};}
+async function nextVersion(family:string){const [row]=await getDatabase().select({value:max(layoutVersions.version)}).from(layoutVersions).where(eq(layoutVersions.family,family));return Number(row?.value??0)+1;}
+export async function saveLayout(family:string,configuration:LayoutConfiguration,notes:string,parentId?:string|null){const version=await nextVersion(family);const [created]=await getDatabase().insert(layoutVersions).values({family:family.trim()||"Untitled Layout",version,status:"draft",configuration:normalizeLayout(configuration),notes,parentId:parentId||null}).returning();return created;}
+export async function activateLayout(id:string){const db=getDatabase();await db.update(layoutVersions).set({status:"archived"}).where(eq(layoutVersions.status,"active"));await db.update(layoutVersions).set({status:"active"}).where(eq(layoutVersions.id,id));}
+export async function restoreLayout(id:string){const source=await getLayout(id);const created=await saveLayout(source.family,source.configuration as LayoutConfiguration,`Restored from version ${source.version}`,source.id);await activateLayout(created.id);return created;}
+export async function duplicateLayout(id:string,name:string){const source=await getLayout(id);return saveLayout(name||`${source.family} Copy`,source.configuration as LayoutConfiguration,`Duplicated from ${source.family} v${source.version}`,source.id);}
+export async function listEnvironments(){return getDatabase().select({id:companies.id,name:companies.name,slug:companies.slug,status:companies.status}).from(companies).orderBy(asc(companies.name));}

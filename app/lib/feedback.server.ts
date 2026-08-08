@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDatabase } from "./db.server";
 import { companies, feedbackItems } from "./schema.server";
 
@@ -18,4 +18,9 @@ export async function createFeedback(note:string,page:string,context:Record<stri
   if(!note.trim()) throw new Response("Feedback note is required",{status:400});
   const db=getDatabase(),id=await companyId();
   await db.insert(feedbackItems).values({companyId:id,note:note.trim(),page,context});
+}
+
+export async function updateFeedbackStatus(itemId:string,status:"flagged"|"implemented") {
+  const db=getDatabase(),id=await companyId();
+  await db.update(feedbackItems).set({status}).where(and(eq(feedbackItems.id,itemId),eq(feedbackItems.companyId,id)));
 }
