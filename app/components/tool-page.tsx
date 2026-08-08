@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher, useLoaderData, useLocation } from "react-router";
 import { modules } from "../lib/navigation";
 
 type ToolDefinition={steps:string[];metrics:[string,string,string][];columns:string[];rows:string[][];aside:[string,string][];primary:string};
@@ -18,11 +18,12 @@ const toolDefinitions:Record<string,ToolDefinition>={
   "change-risk":{steps:["Capture event","Assess exposure","Plan action","Monitor","Close"],metrics:[["Open events","14","$486K exposure"],["High risk","3","Action required"],["Mitigated","22","$311K avoided"]],columns:["Event","Project","Exposure","Risk score","Next action"],rows:[["Steel escalation","Oakfield Trails","$142,000","82","Lock pricing"],["Design revision 07","JHACH Pharmacy","$86,000","67","Owner notice"],["Unknown utilities","PHSC Repairs","$41,000","54","Verify survey"]],aside:[["Portfolio risk","68 · elevated"],["Guardrails","No autonomous commitments"],["Recommended actions","5 awaiting approval"]],primary:"LOG CHANGE EVENT"},
 };
 
-type WorkflowRow={id:string;toolKey:string;type:string;state:string;revision:number;payload:unknown};
+type WorkflowRow={id:string;projectId?:string|null;toolKey:string;type:string;state:string;revision:number;payload:unknown};
 export function ToolPage({slug,confirm}:{slug:string;confirm:(value:string)=>void}) {
   const module=modules.find(item=>item[0]===slug)??modules[0]; const definition=toolDefinitions[slug]??toolDefinitions["proposal-designer"];
-  const {records}=useLoaderData<{records:WorkflowRow[]}>();const fetcher=useFetcher();const [creating,setCreating]=useState(false);const [title,setTitle]=useState("");const [detail,setDetail]=useState("");const toolRecords=records.filter(record=>record.toolKey===slug);const type=slug==="proposal-designer"?"proposal":slug==="subcontractors"?"contractor":slug==="solicitations"?"solicitation":slug==="risk"?"scope-review":"workflow-item";
-  function create(event:React.FormEvent){event.preventDefault();fetcher.submit({intent:"workflow-create",toolKey:slug,type,title,detail},{method:"post"});setTitle("");setDetail("");setCreating(false);}
+  const {records}=useLoaderData<{records:WorkflowRow[]}>();const location=useLocation();const projectId=new URLSearchParams(location.search).get("project");const fetcher=useFetcher();const [creating,setCreating]=useState(false);const [title,setTitle]=useState("");const [detail,setDetail]=useState("");const toolRecords=records.filter(record=>record.toolKey===slug&&(!projectId||!record.projectId||record.projectId===projectId));const type=slug==="proposal-designer"?"proposal":slug==="subcontractors"?"contractor":slug==="solicitations"?"solicitation":slug==="risk"?"scope-review":"workflow-item";
+  function create(event:React.FormEvent){event.preventDefault();fetcher.submit({intent:"workflow-create",toolKey:slug,type,title,detail,projectId:projectId??""},{method:"post"});setTitle("");setDetail("");setCreating(false);}
+  if(!projectId)return <div className="empty-state"><b>Open a project first</b><span>{module[2]} is a project-scoped workflow.</span><Link className="primary" to="/app/projects">SELECT PROJECT</Link></div>;
   return <div className="tool-workspace">
     <div className="workflow-steps">{definition.steps.map((step,index)=><div className={`workflow-step ${index===0?"active":""}`} key={step}><span>{String(index+1).padStart(2,"0")}</span>{step}</div>)}</div>
     <div className="metrics compact">{definition.metrics.map(metric=><div className="metric" key={metric[0]}><label>{metric[0]}</label><strong>{metric[1]}</strong><small>{metric[2]}</small></div>)}</div>

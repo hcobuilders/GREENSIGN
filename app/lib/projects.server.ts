@@ -50,3 +50,11 @@ export async function createProject() {
   const code=`NEW-${String(Date.now()).slice(-4)}`;
   await db.insert(projects).values({companyId:company.id,code,name:"Untitled project",status:"planning",phase:"preconstruction",owner:"Unassigned"});
 }
+
+export async function createProjectsFromUpload(file:File) {
+  const text=await file.text();let rows:Record<string,unknown>[]=[];
+  if(file.name.toLowerCase().endsWith(".json")) {const parsed=JSON.parse(text);rows=Array.isArray(parsed)?parsed:[parsed];}
+  else {const [header,...lines]=text.split(/\r?\n/).filter(Boolean);if(!header)throw new Response("The uploaded file is empty",{status:400});const keys=header.split(",").map(value=>value.trim());rows=lines.map(line=>Object.fromEntries(keys.map((key,index)=>[key,line.split(",")[index]?.trim()??""])));}
+  const company=await ensureFoundationCompany(),db=getDatabase();const values=rows.filter(row=>row.code||row.name).map((row,index)=>({companyId:company.id,code:String(row.code||`IMPORT-${Date.now()}-${index+1}`),name:String(row.name||"Untitled project"),status:String(row.status||"planning"),phase:String(row.phase||"preconstruction"),owner:String(row.owner||"Unassigned"),startDate:row.startDate?String(row.startDate):null,dueDate:row.dueDate?String(row.dueDate):null,completionDate:row.completionDate?String(row.completionDate):null}));
+  if(!values.length)throw new Response("No project rows were found",{status:400});await db.insert(projects).values(values);return values.length;
+}
