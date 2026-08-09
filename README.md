@@ -2,9 +2,18 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.6.0-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.7.0-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
+
+## v0.7.0 linked project intake and Godmode controls
+
+- Added confirmation-first draft project intake with drawing/specification uploads, stored originals, deterministic PDF/text extraction, editable parsed project facts, parsed CSI scope candidates, and approval into an operating project.
+- Linked project documents, scope records, proposals, solicitations/bid packages, due dates, and persistent trade-partner recipients throughout the application.
+- Rebuilt Network as a persistent contractor directory with structured addresses, licenses, prequalification, insurance, qualifications, and past-project information.
+- Completed Godmode Versions, Environments, and Interface Map editors, including immutable layout lifecycle controls and in-preview element color pickers.
+- Completed account/company/tool settings, unlinked proposal management, customizable shared tags, styled address and command suggestions, and direct destinations for application actions.
+- Increased the responsive type system for 1080p and 4K use while preserving full-window-width workspaces.
 
 ## v0.6.0 Godmode layout studio
 
@@ -108,4 +117,4 @@ GREENSIGN uses sequential release branches. Each new approved product version st
 
 ## Current boundary
 
-Authentication, OAuth providers, email delivery, document generation, external connectors, and Railway deployment remain deferred. Project, workflow, settings, feedback, and company-environment writes are PostgreSQL-backed in the current operating build.
+Authentication, OAuth providers, external email delivery, generative document output, external connectors, and Railway deployment remain deferred. Project intake, stored source documents, deterministic parsing, scopes, proposals, bid packages, trade partners, workflows, settings, feedback, layouts, managed environment definitions, and interface mapping are PostgreSQL-backed in the current operating build.
