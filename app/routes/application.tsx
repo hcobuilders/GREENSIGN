@@ -92,7 +92,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     company: await getCompany(),
     layout: await getLayout(url.searchParams.get("layout")),
     runtime: {
-      version: process.env.APP_VERSION ?? "0.8.1",
+      version: process.env.APP_VERSION ?? "0.8.2",
       buildDate: process.env.BUILD_DATE ?? "Development build",
       environment: "GREENSIGN DEV",
       server: "Online",

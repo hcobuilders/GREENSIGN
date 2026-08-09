@@ -5,6 +5,7 @@ import {
   type StructuredAddress,
 } from "./address-field";
 import { ProjectWorkspace } from "./project-workspace";
+import { MAX_PROJECT_DOCUMENT_MB } from "../lib/document-limits";
 
 export type ProjectRow = {
   id: string;
@@ -348,7 +349,8 @@ export function ProjectsPage({
                 <span>
                   Upload PDF drawing sets, specifications, addenda, or text
                   schedules. Each file is parsed and then committed with the
-                  project as one safe transaction.
+                  project as one safe transaction. Up to{" "}
+                  {MAX_PROJECT_DOCUMENT_MB} MB per file.
                 </span>
               </label>
             </div>
