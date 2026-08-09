@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate } from "react-router";
-import { AddressField } from "./address-field";
+import {
+  AddressField,
+  type StructuredAddress,
+} from "./address-field";
 import { ProjectWorkspace } from "./project-workspace";
 
 export type ProjectRow = {
@@ -62,6 +65,11 @@ const statuses = [
 ];
 const textFields = ["code", "name", "phase", "owner"] as const;
 const dateFields = ["startDate", "dueDate", "completionDate"] as const;
+type CustomField = {
+  name: string;
+  type: string;
+  value: string | StructuredAddress;
+};
 
 export function ProjectsPage({
   projects,
@@ -74,7 +82,12 @@ export function ProjectsPage({
   documents: DocumentRow[];
   partners: PartnerRow[];
 }) {
-  const fetcher = useFetcher<{ ok: boolean; createdId?: string }>(),
+  const fetcher = useFetcher<{
+      ok: boolean;
+      createdId?: string;
+      error?: string;
+      warning?: string;
+    }>(),
     location = useLocation(),
     navigate = useNavigate(),
     params = new URLSearchParams(location.search);
@@ -83,9 +96,8 @@ export function ProjectsPage({
     [selected, setSelected] = useState<Set<string>>(new Set()),
     [bulkStatus, setBulkStatus] = useState("active"),
     [creating, setCreating] = useState(params.get("create") === "1"),
-    [customFields, setCustomFields] = useState<
-      Array<{ name: string; type: string; value: string }>
-    >([]);
+    [files, setFiles] = useState<File[]>([]),
+    [customFields, setCustomFields] = useState<CustomField[]>([]);
   const filtered = useMemo(
       () =>
         projects.filter(
@@ -207,9 +219,6 @@ export function ProjectsPage({
         >
           DELETE
         </button>
-        <button className="secondary" onClick={() => setCreating(true)}>
-          IMPORT DRAWINGS + SPECS
-        </button>
         <button className="primary" onClick={() => setCreating(true)}>
           + NEW PROJECT
         </button>
@@ -227,7 +236,7 @@ export function ProjectsPage({
                 />
               </th>
               <th>Open</th>
-              <th>Code</th>
+              <th>Project number</th>
               <th>Project</th>
               <th>Status</th>
               <th>Phase</th>
@@ -286,11 +295,21 @@ export function ProjectsPage({
               </button>
             </div>
             <div className="intake-steps">
-              <span>01 PROJECT</span>
-              <span>02 DOCUMENTS</span>
-              <span>03 PARSE</span>
+              <span className="complete">01 PROJECT</span>
+              <span className={files.length ? "complete" : ""}>
+                02 DOCUMENTS
+              </span>
+              <span className={fetcher.state !== "idle" ? "active" : ""}>
+                03 PARSE
+              </span>
               <span>04 CONFIRM</span>
             </div>
+            {fetcher.data?.error && (
+              <div className="intake-message error" role="alert">
+                <b>UPLOAD DID NOT COMPLETE</b>
+                <span>{fetcher.data.error}</span>
+              </div>
+            )}
             <div className="drawer-grid">
               <label>
                 PROJECT NUMBER
@@ -320,15 +339,44 @@ export function ProjectsPage({
                 <input
                   name="documents"
                   type="file"
-                  accept=".pdf,.txt,.csv,.json,application/pdf,text/plain"
+                  accept=".pdf,.txt,application/pdf,text/plain"
                   multiple
+                  onChange={(event) =>
+                    setFiles(Array.from(event.currentTarget.files ?? []))
+                  }
                 />
                 <span>
                   Upload PDF drawing sets, specifications, addenda, or text
-                  schedules. Each file is stored, parsed, and held for
-                  confirmation.
+                  schedules. Each file is parsed and then committed with the
+                  project as one safe transaction.
                 </span>
               </label>
+            </div>
+            <div className="upload-queue" aria-live="polite">
+              <header>
+                <b>UPLOAD QUEUE</b>
+                <span>{files.length} FILE{files.length === 1 ? "" : "S"}</span>
+              </header>
+              {files.map((file) => (
+                <article key={`${file.name}-${file.lastModified}`}>
+                  <div>
+                    <b>{file.name}</b>
+                    <span>{formatFileSize(file.size)}</span>
+                  </div>
+                  <strong
+                    className={fetcher.data?.error ? "error" : undefined}
+                  >
+                    {fetcher.state !== "idle"
+                      ? "PARSING"
+                      : fetcher.data?.error
+                        ? "RETRY"
+                        : "READY"}
+                  </strong>
+                </article>
+              ))}
+              {!files.length && (
+                <p>Select one or more drawing or specification files above.</p>
+              )}
             </div>
             <section className="custom-fields">
               <div className="panel-head">
@@ -374,7 +422,25 @@ export function ProjectsPage({
                       setCustomFields((current) =>
                         current.map((item, itemIndex) =>
                           itemIndex === index
-                            ? { ...item, type: event.target.value }
+                            ? {
+                                ...item,
+                                type: event.target.value,
+                                value:
+                                  event.target.value === "address"
+                                    ? {
+                                        formatted:
+                                          typeof item.value === "string"
+                                            ? item.value
+                                            : item.value.formatted,
+                                        street: "",
+                                        city: "",
+                                        state: "",
+                                        zip: "",
+                                      }
+                                    : typeof item.value === "string"
+                                      ? item.value
+                                      : item.value.formatted,
+                              }
                             : item,
                         ),
                       )
@@ -386,26 +452,41 @@ export function ProjectsPage({
                       ),
                     )}
                   </select>
-                  <input
-                    aria-label="Parameter value"
-                    type={
-                      field.type === "date"
-                        ? "date"
-                        : field.type === "value"
-                          ? "number"
-                          : "text"
-                    }
-                    value={field.value}
-                    onChange={(event) =>
-                      setCustomFields((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, value: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
+                  {field.type === "address" ? (
+                    <AddressField
+                      label="PARAMETER ADDRESS"
+                      submitFields={false}
+                      value={field.value}
+                      onChange={(value) =>
+                        setCustomFields((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, value } : item,
+                          ),
+                        )
+                      }
+                    />
+                  ) : (
+                    <input
+                      aria-label="Parameter value"
+                      type={
+                        field.type === "date"
+                          ? "date"
+                          : field.type === "value"
+                            ? "number"
+                            : "text"
+                      }
+                      value={String(field.value)}
+                      onChange={(event) =>
+                        setCustomFields((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, value: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  )}
                   <button
                     type="button"
                     className="danger-button"
@@ -439,6 +520,11 @@ export function ProjectsPage({
       )}
     </section>
   );
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function ProjectTableRow({
