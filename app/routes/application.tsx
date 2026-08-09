@@ -20,6 +20,7 @@ import { ProjectWorkspace } from "../components/project-workspace";
 import { DataWorkspace } from "../components/data-workspace";
 import { NetworkWorkspace } from "../components/network-workspace";
 import { SettingsWorkspace } from "../components/settings-workspace";
+import { AiAssistant } from "../components/ai-assistant";
 import {
   bulkUpdateProjects,
   createProject,
@@ -63,6 +64,14 @@ import {
   listTradePartners,
   updateTradePartner,
 } from "../lib/partners.server";
+import {
+  applyAiSuggestion,
+  getAiRuntime,
+  listAiJobs,
+  listAiSuggestions,
+  reviewAiSuggestion,
+  runAiAssistant,
+} from "../lib/ai.server";
 import type { Route } from "./+types/application";
 
 export function meta(): Route.MetaDescriptors {
@@ -76,11 +85,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     records: await listWorkflowRecords(),
     documents: await listProjectDocuments(),
     partners: await listTradePartners(),
+    aiRuntime: await getAiRuntime(),
+    aiJobs: await listAiJobs(),
+    aiSuggestions: await listAiSuggestions(),
     configurations: await listToolConfigurations(),
     company: await getCompany(),
     layout: await getLayout(url.searchParams.get("layout")),
     runtime: {
-      version: process.env.APP_VERSION ?? "0.7.0",
+      version: process.env.APP_VERSION ?? "0.8.0",
       buildDate: process.env.BUILD_DATE ?? "Development build",
       environment: "GREENSIGN DEV",
       server: "Online",
@@ -136,7 +148,15 @@ export async function action({ request }: Route.ActionArgs) {
         .filter(
           (value): value is File => value instanceof File && value.size > 0,
         );
-      if (files.length) await ingestProjectDocuments(createdId, files);
+      if (files.length) {
+        await ingestProjectDocuments(createdId, files);
+        await runAiAssistant({
+          capability: "project-intake",
+          projectId: createdId,
+          instruction:
+            "Review the newly uploaded project documents, identify facts and scope, and prepare a confirmation draft with source evidence.",
+        });
+      }
     }
   } else if (intent === "document-upload") {
     const projectId = String(form.get("projectId")),
@@ -146,6 +166,13 @@ export async function action({ request }: Route.ActionArgs) {
           (value): value is File => value instanceof File && value.size > 0,
         );
     await ingestProjectDocuments(projectId, files);
+    if (files.length)
+      await runAiAssistant({
+        capability: "project-intake",
+        projectId,
+        instruction:
+          "Merge these newly uploaded documents into the current project review and prepare an updated confirmation draft with source evidence.",
+      });
   } else if (intent === "intake-confirm")
     await confirmProjectIntake(
       String(form.get("projectId")),
@@ -247,6 +274,26 @@ export async function action({ request }: Route.ActionArgs) {
       String(form.get("id")),
       JSON.parse(String(form.get("patch") ?? "{}")),
     );
+  else if (intent === "ai-run") {
+    const suggestion = await runAiAssistant({
+      capability: String(form.get("capability") ?? "project-intelligence"),
+      projectId: String(form.get("projectId") ?? "") || null,
+      instruction: String(form.get("instruction") ?? ""),
+    });
+    return {
+      ok: true,
+      aiSuggestionId: suggestion.id,
+      message: "Review draft generated",
+    };
+  } else if (intent === "ai-review") {
+    await reviewAiSuggestion(
+      String(form.get("id")),
+      String(form.get("status")) === "rejected" ? "rejected" : "accepted",
+    );
+  } else if (intent === "ai-apply") {
+    const applied = await applyAiSuggestion(String(form.get("id")));
+    return { ok: true, applied, message: "Workflow draft created" };
+  }
   else if (intent === "activity-approve")
     await createWorkflowRecord(
       "activity",
@@ -489,6 +536,7 @@ const commands = [
   "/quick-add",
   "/commands",
   "/ver",
+  "/ai",
 ];
 
 function Settings({
@@ -814,6 +862,10 @@ export default function Application({ loaderData }: Route.ComponentProps) {
     [command, setCommand] = useState(""),
     [commandActive, setCommandActive] = useState(false),
     [commandTip, setCommandTip] = useState<string>(),
+    [aiOpen, setAiOpen] = useState(false),
+    [aiInstruction, setAiInstruction] = useState(""),
+    [aiProjectOverride, setAiProjectOverride] = useState<string>(),
+    [aiCapabilityOverride, setAiCapabilityOverride] = useState<string>(),
     [feedbackPoint, setFeedbackPoint] = useState<{ x: number; y: number }>();
   const current = path[0] || "dashboard",
     toolSlug = current === "tools" ? path[1] : undefined,
@@ -825,6 +877,19 @@ export default function Application({ loaderData }: Route.ComponentProps) {
         : (new URLSearchParams(location.search).get("project") ?? undefined),
     activeProject = loaderData.projects.find(
       (item) => item.id === activeProjectId,
+    ),
+    aiCapability = toolSlug
+      ? toolSlug
+      : activeProject?.status === "draft"
+        ? "project-intake"
+        : current === "network"
+          ? "subcontractors"
+          : current === "data"
+            ? "project-intake"
+            : "project-intelligence",
+    assistantProjectId = aiProjectOverride ?? activeProjectId,
+    assistantProject = loaderData.projects.find(
+      (item) => item.id === assistantProjectId,
     );
   const companySettings = (loaderData.company.settings ?? {}) as Record<
       string,
@@ -966,6 +1031,14 @@ export default function Application({ loaderData }: Route.ComponentProps) {
       resetCommand();
       return;
     }
+    if (normalized === "/ai") {
+      setAiInstruction("");
+      setAiProjectOverride(undefined);
+      setAiCapabilityOverride(undefined);
+      setAiOpen(true);
+      resetCommand();
+      return;
+    }
     if (normalized === "/ver") {
       const runtime = loaderData.runtime;
       setCommandTip(
@@ -1004,6 +1077,44 @@ export default function Application({ loaderData }: Route.ComponentProps) {
       navigate(
         `${base}/tools/${actionSlug}?${activeProjectId ? `project=${activeProjectId}&` : ""}create=1`,
       );
+      resetCommand();
+      return;
+    }
+    if (value && !value.startsWith("/")) {
+      const referencedProject = loaderData.projects.find(
+          (item) =>
+            normalized.includes(item.code.toLowerCase()) ||
+            normalized.includes(item.name.toLowerCase()),
+        ),
+        inferredCapability = /bid package|solicitation|invite/.test(normalized)
+          ? "solicitations"
+          : /proposal|clarification|exclusion/.test(normalized)
+            ? "proposal-designer"
+            : /scope|risk|coverage/.test(normalized)
+              ? "risk"
+              : /\brfi\b|question/.test(normalized)
+                ? "rfis"
+                : /submittal/.test(normalized)
+                  ? "submittals"
+                  : /procure|long[- ]lead|purchase/.test(normalized)
+                    ? "procurement"
+                    : /schedule|milestone|sequence/.test(normalized)
+                      ? "schedule"
+                      : /closeout|warranty|turnover/.test(normalized)
+                        ? "closeout"
+                        : /change|potential cost/.test(normalized)
+                          ? "change-risk"
+                          : /contractor|subcontractor|trade partner/.test(
+                                normalized,
+                              )
+                            ? "subcontractors"
+                            : /document|drawing|spec|intake/.test(normalized)
+                              ? "project-intake"
+                              : "command";
+      setAiInstruction(value);
+      setAiProjectOverride(referencedProject?.id);
+      setAiCapabilityOverride(inferredCapability);
+      setAiOpen(true);
       resetCommand();
       return;
     }
@@ -1145,6 +1256,17 @@ export default function Application({ loaderData }: Route.ComponentProps) {
             {layout.showSubtitles && <div className="subtitle">{subtitle}</div>}
           </div>
           <div className="page-actions">
+            <button
+              className={`ai-open-button ${loaderData.aiRuntime.enabled ? "live" : ""}`}
+              onClick={() => {
+                setAiInstruction("");
+                setAiProjectOverride(undefined);
+                setAiCapabilityOverride(undefined);
+                setAiOpen(true);
+              }}
+            >
+              <i /> AI ASSIST
+            </button>
             {toolSlug && (
               <Link
                 className="tool-settings"
@@ -1277,6 +1399,25 @@ export default function Application({ loaderData }: Route.ComponentProps) {
       {dialog && (
         <ConfirmDialog title={dialog} onClose={() => setDialog(undefined)} />
       )}
+      <AiAssistant
+        open={aiOpen}
+        close={() => {
+          setAiOpen(false);
+          setAiProjectOverride(undefined);
+          setAiCapabilityOverride(undefined);
+        }}
+        capability={aiCapabilityOverride ?? aiCapability}
+        projectId={assistantProjectId}
+        projectLabel={
+          assistantProject
+            ? `${assistantProject.code} · ${assistantProject.name}`
+            : undefined
+        }
+        runtime={loaderData.aiRuntime}
+        suggestions={loaderData.aiSuggestions}
+        jobs={loaderData.aiJobs}
+        initialInstruction={aiInstruction}
+      />
     </div>
   );
 }

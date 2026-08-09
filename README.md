@@ -2,9 +2,18 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.7.0-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.8.0-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
+
+## v0.8.0 approval-first AI assistance
+
+- Added a global, project-aware AI copilot across project intake and every construction workflow, with natural-language entry through the command bar.
+- Added OpenAI Responses API integration with strict structured outputs, server-only credentials, configurable model routing, prompt versioning, usage/latency records, source evidence, and immutable approval history.
+- Automatically prepares a project-intake review after document uploads while preserving the deterministic parser and the existing For Approval confirmation workflow.
+- Added connected draft generation for project intelligence, scope review, trade-partner matching, solicitations, proposals, RFIs, commitments, submittals, procurement, schedule, closeout, and change risk.
+- Added a Godmode AI Control Center for cloud-processing approval, model routes, editable prompt versions, activation/rollback, and permanent safety boundaries.
+- Added a deterministic offline assistant so the complete review and approval interface remains testable without transmitting documents or configuring an API key.
 
 ## v0.7.0 linked project intake and Godmode controls
 
@@ -87,6 +96,7 @@ The approved interactive presentation remains available at `/mockup`. The applic
 - PostgreSQL 17 + Drizzle ORM and generated SQL migrations
 - Docker Compose for the local database
 - Multi-stage Docker image and Railway service configuration
+- OpenAI Responses API with structured outputs and approval-first application actions
 - External file references rather than duplicated managed files
 
 ## Local setup
@@ -117,4 +127,4 @@ GREENSIGN uses sequential release branches. Each new approved product version st
 
 ## Current boundary
 
-Authentication, OAuth providers, external email delivery, generative document output, external connectors, and Railway deployment remain deferred. Project intake, stored source documents, deterministic parsing, scopes, proposals, bid packages, trade partners, workflows, settings, feedback, layouts, managed environment definitions, and interface mapping are PostgreSQL-backed in the current operating build.
+Authentication, OAuth providers, external email delivery, generated PDF/DOCX output, external connectors, and Railway deployment remain deferred. AI assistance is operational when cloud processing is explicitly approved and a server-side `OPENAI_API_KEY` is configured; otherwise the same review surfaces use the deterministic offline assistant. All AI results remain approval-gated drafts and external, destructive, publishing, commitment, and financial actions are blocked.

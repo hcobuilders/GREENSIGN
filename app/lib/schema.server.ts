@@ -289,3 +289,96 @@ export const interfaceMapItems = pgTable(
   },
   (t) => [index("interface_map_group_idx").on(t.group, t.region)],
 );
+
+export const aiPromptVersions = pgTable(
+  "ai_prompt_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: uuid("company_id")
+      .references(() => companies.id, { onDelete: "cascade" })
+      .notNull(),
+    key: text("key").notNull(),
+    version: integer("version").notNull().default(1),
+    status: text("status").notNull().default("active"),
+    model: text("model").notNull().default("gpt-5.6-terra"),
+    reasoning: text("reasoning").notNull().default("low"),
+    instructions: text("instructions").notNull(),
+    outputSchema: jsonb("output_schema").notNull().default({}),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("ai_prompt_company_key_idx").on(t.companyId, t.key, t.status),
+    index("ai_prompt_version_idx").on(t.companyId, t.key, t.version),
+  ],
+);
+
+export const aiJobs = pgTable(
+  "ai_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: uuid("company_id")
+      .references(() => companies.id, { onDelete: "cascade" })
+      .notNull(),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    capability: text("capability").notNull(),
+    status: text("status").notNull().default("queued"),
+    provider: text("provider").notNull().default("offline"),
+    model: text("model").notNull().default(""),
+    promptKey: text("prompt_key").notNull(),
+    promptVersion: integer("prompt_version").notNull().default(1),
+    requestSummary: text("request_summary").notNull().default(""),
+    output: jsonb("output").notNull().default({}),
+    error: text("error").notNull().default(""),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("ai_job_company_idx").on(t.companyId, t.createdAt),
+    index("ai_job_project_idx").on(t.projectId, t.createdAt),
+    index("ai_job_status_idx").on(t.companyId, t.status),
+  ],
+);
+
+export const aiSuggestions = pgTable(
+  "ai_suggestions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: uuid("company_id")
+      .references(() => companies.id, { onDelete: "cascade" })
+      .notNull(),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    jobId: uuid("job_id")
+      .references(() => aiJobs.id, { onDelete: "cascade" })
+      .notNull(),
+    capability: text("capability").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull().default(""),
+    confidence: integer("confidence").notNull().default(0),
+    payload: jsonb("payload").notNull().default({}),
+    evidence: jsonb("evidence").notNull().default([]),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("ai_suggestion_company_idx").on(t.companyId, t.status, t.createdAt),
+    index("ai_suggestion_project_idx").on(t.projectId, t.createdAt),
+  ],
+);

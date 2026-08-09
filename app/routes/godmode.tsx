@@ -23,6 +23,13 @@ import {
 } from "../lib/layouts.server";
 import { modules } from "../lib/navigation";
 import { createFeedback } from "../lib/feedback.server";
+import {
+  activateAiPrompt,
+  getAiRuntime,
+  listAiPrompts,
+  saveAiPromptVersion,
+  updateAiConfiguration,
+} from "../lib/ai.server";
 import type { Route } from "./+types/godmode";
 
 export function meta() {
@@ -37,6 +44,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     selected,
     environments: await listEnvironments(),
     interfaceMap: await listInterfaceMap(),
+    aiRuntime: await getAiRuntime(),
+    aiPrompts: await listAiPrompts(),
   };
 }
 export async function action({ request }: Route.ActionArgs) {
@@ -86,6 +95,23 @@ export async function action({ request }: Route.ActionArgs) {
     await createInterfaceMapItem(stringValues(form));
   } else if (intent === "map-update")
     await updateInterfaceMapItem(String(form.get("id")), stringValues(form));
+  else if (intent === "ai-setting") {
+    const raw = String(form.get("value") ?? "");
+    await updateAiConfiguration(
+      String(form.get("key")),
+      raw === "true" ? true : raw === "false" ? false : raw,
+    );
+  } else if (intent === "ai-prompt-save") {
+    const created = await saveAiPromptVersion({
+      key: String(form.get("key")),
+      model: String(form.get("model") ?? "gpt-5.6-terra"),
+      reasoning: String(form.get("reasoning") ?? "low"),
+      instructions: String(form.get("instructions") ?? ""),
+      notes: String(form.get("notes") ?? ""),
+    });
+    return { ok: true, createdId: created.id };
+  } else if (intent === "ai-prompt-activate")
+    await activateAiPrompt(String(form.get("id")));
   else throw new Response("Unsupported Godmode action", { status: 400 });
   return { ok: true };
 }
@@ -137,7 +163,14 @@ function utcTimestamp(value: string | Date) {
 }
 
 export default function Godmode() {
-  const { layouts, selected, environments, interfaceMap } =
+  const {
+      layouts,
+      selected,
+      environments,
+      interfaceMap,
+      aiRuntime,
+      aiPrompts,
+    } =
       useLoaderData<typeof loader>(),
     fetcher = useFetcher<{ ok: boolean; createdId?: string }>(),
     navigate = useNavigate(),
@@ -183,6 +216,7 @@ export default function Godmode() {
         </Link>
         <nav>
           <a href="#studio">LAYOUT STUDIO</a>
+          <a href="#ai-control">AI CONTROL</a>
           <a href="#versions">VERSIONS</a>
           <a href="#environments">ENVIRONMENTS</a>
           <a href="#map">INTERFACE MAP</a>
@@ -548,6 +582,11 @@ export default function Godmode() {
             </EditorSection>
           </div>
         </div>
+        <AiControlPanel
+          runtime={aiRuntime}
+          prompts={aiPrompts}
+          submit={submit}
+        />
         <section className="gm-library" id="versions">
           <div className="gm-section-head">
             <div>
@@ -831,6 +870,189 @@ export default function Godmode() {
     </div>
   );
 }
+function AiControlPanel({
+  runtime,
+  prompts,
+  submit,
+}: {
+  runtime: {
+    enabled: boolean;
+    cloudApproved: boolean;
+    keyConfigured: boolean;
+    provider: string;
+    bulkModel: string;
+    reasoningModel: string;
+    approvalMode: string;
+    externalActions: string;
+  };
+  prompts: {
+    id: string;
+    key: string;
+    version: number;
+    status: string;
+    model: string;
+    reasoning: string;
+    instructions: string;
+    notes: string;
+    createdAt: Date;
+  }[];
+  submit: (data: Record<string, string>) => void;
+}) {
+  const active = prompts.filter((prompt) => prompt.status === "active"),
+    archived = prompts.filter((prompt) => prompt.status !== "active");
+  return (
+    <section className="gm-library gm-ai-control" id="ai-control">
+      <div className="gm-section-head">
+        <div>
+          <span>APPROVAL-FIRST INTELLIGENCE</span>
+          <h2>AI CONTROL CENTER</h2>
+        </div>
+        <b>{runtime.enabled ? "LIVE AI READY" : "OFFLINE MODE"}</b>
+      </div>
+      <div className="gm-ai-runtime-grid">
+        <article className={runtime.enabled ? "ready" : "offline"}>
+          <span>PROCESSING STATE</span>
+          <h3>{runtime.provider.toUpperCase()}</h3>
+          <p>
+            Cloud permission: {runtime.cloudApproved ? "approved" : "blocked"}
+            <br />
+            Server key: {runtime.keyConfigured ? "configured" : "not configured"}
+            <br />
+            External actions: {runtime.externalActions.toLowerCase()}
+          </p>
+          <button
+            className={runtime.cloudApproved ? "gm-secondary" : "gm-primary"}
+            onClick={() =>
+              submit({
+                intent: "ai-setting",
+                key: "ai:cloudApproved",
+                value: String(!runtime.cloudApproved),
+              })
+            }
+          >
+            {runtime.cloudApproved
+              ? "REVOKE CLOUD DOCUMENT APPROVAL"
+              : "APPROVE CLOUD DOCUMENT PROCESSING"}
+          </button>
+          <small>
+            Approval only enables requests after OPENAI_API_KEY is securely set
+            on the server. Keys are never entered or displayed here.
+          </small>
+        </article>
+        <form method="post">
+          <input type="hidden" name="intent" value="ai-setting" />
+          <input type="hidden" name="key" value="ai:bulkModel" />
+          <span>HIGH-VOLUME MODEL</span>
+          <h3>EXTRACTION + CLASSIFICATION</h3>
+          <label>
+            MODEL ID
+            <input name="value" defaultValue={runtime.bulkModel} />
+          </label>
+          <button className="gm-secondary">SAVE MODEL ROUTE</button>
+        </form>
+        <form method="post">
+          <input type="hidden" name="intent" value="ai-setting" />
+          <input type="hidden" name="key" value="ai:reasoningModel" />
+          <span>REASONING MODEL</span>
+          <h3>SCOPE + COMMERCIAL REVIEW</h3>
+          <label>
+            MODEL ID
+            <input name="value" defaultValue={runtime.reasoningModel} />
+          </label>
+          <button className="gm-secondary">SAVE MODEL ROUTE</button>
+        </form>
+      </div>
+      <div className="gm-ai-policy">
+        <b>IMMUTABLE SAFETY BOUNDARY</b>
+        <span>{runtime.approvalMode}</span>
+        <span>
+          No generated content can send, publish, delete, commit funds, or alter
+          approved values.
+        </span>
+      </div>
+      <div className="gm-ai-prompts">
+        {active.map((prompt) => (
+          <form method="post" key={prompt.id}>
+            <input type="hidden" name="intent" value="ai-prompt-save" />
+            <input type="hidden" name="key" value={prompt.key} />
+            <header>
+              <div>
+                <span>{prompt.key.replaceAll("-", " ")}</span>
+                <h3>PROMPT V{prompt.version}</h3>
+              </div>
+              <b>ACTIVE</b>
+            </header>
+            <div className="gm-ai-prompt-meta">
+              <label>
+                MODEL
+                <select name="model" defaultValue={prompt.model}>
+                  <option value="gpt-5.6-luna">GPT-5.6 LUNA</option>
+                  <option value="gpt-5.6-terra">GPT-5.6 TERRA</option>
+                  <option value="gpt-5.6-sol">GPT-5.6 SOL</option>
+                </select>
+              </label>
+              <label>
+                REASONING
+                <select name="reasoning" defaultValue={prompt.reasoning}>
+                  <option value="none">NONE</option>
+                  <option value="low">LOW</option>
+                  <option value="medium">MEDIUM</option>
+                  <option value="high">HIGH</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              INSTRUCTIONS
+              <textarea
+                name="instructions"
+                rows={7}
+                defaultValue={prompt.instructions}
+              />
+            </label>
+            <label>
+              VERSION NOTES
+              <input
+                name="notes"
+                defaultValue={prompt.notes}
+                placeholder="Why this prompt changed"
+              />
+            </label>
+            <button className="gm-primary">SAVE AS NEW ACTIVE VERSION</button>
+          </form>
+        ))}
+      </div>
+      {archived.length > 0 && (
+        <details className="gm-ai-history">
+          <summary>{archived.length} ARCHIVED PROMPT VERSIONS</summary>
+          <div>
+            {archived.map((prompt) => (
+              <article key={prompt.id}>
+                <div>
+                  <b>
+                    {prompt.key.toUpperCase()} · V{prompt.version}
+                  </b>
+                  <span>
+                    {prompt.model} · {prompt.reasoning} ·{" "}
+                    {utcTimestamp(prompt.createdAt)}
+                  </span>
+                </div>
+                <button
+                  className="gm-secondary"
+                  onClick={() =>
+                    submit({ intent: "ai-prompt-activate", id: prompt.id })
+                  }
+                >
+                  ACTIVATE VERSION
+                </button>
+              </article>
+            ))}
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
 function GodmodeFeedback({
   point,
   close,
