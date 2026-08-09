@@ -2,9 +2,14 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.8.1-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.8.2-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
+
+## v0.8.2 100 MB project uploads
+
+- Increased the project drawing and specification limit from 25 MB to 100 MB per file for both new-project intake and later document uploads.
+- Centralized the limit so server validation and both upload interfaces remain synchronized.
 
 ## v0.8.1 resilient intake and feedback completion
 

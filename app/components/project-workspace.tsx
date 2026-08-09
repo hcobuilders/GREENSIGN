@@ -13,6 +13,7 @@ import type {
   ProjectRow,
   WorkflowRow,
 } from "./projects-page";
+import { MAX_PROJECT_DOCUMENT_MB } from "../lib/document-limits";
 
 type BidPackage = {
   id?: string;
@@ -408,6 +409,7 @@ function DraftApproval({
               required
             />
             <button className="secondary">UPLOAD + REPARSE</button>
+            <span>UP TO {MAX_PROJECT_DOCUMENT_MB} MB PER FILE</span>
           </fetcher.Form>
           {fetcher.data?.error && (
             <div className="intake-message error" role="alert">

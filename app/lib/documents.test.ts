@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { parseProjectText } from "./documents.server";
+import {
+  MAX_PROJECT_DOCUMENT_BYTES,
+  MAX_PROJECT_DOCUMENT_MB,
+  projectDocumentLimitError,
+} from "./document-limits";
 
 describe("project document parsing", () => {
+  it("uses a shared 100 MB per-file limit", () => {
+    expect(MAX_PROJECT_DOCUMENT_MB).toBe(100);
+    expect(MAX_PROJECT_DOCUMENT_BYTES).toBe(104_857_600);
+    expect(projectDocumentLimitError("plans.pdf")).toBe(
+      "plans.pdf exceeds the 100 MB per-file limit",
+    );
+  });
+
   it("extracts confirmation fields, ISO dates, values, and division scopes", () => {
     const parsed = parseProjectText(
       [

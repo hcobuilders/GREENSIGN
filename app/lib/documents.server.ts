@@ -2,6 +2,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { getDatabase } from "./db.server";
 import { projectDocuments, projects, workflowRecords } from "./schema.server";
 import { ensureFoundationCompany, getProject } from "./projects.server";
+import {
+  MAX_PROJECT_DOCUMENT_BYTES,
+  projectDocumentLimitError,
+} from "./document-limits";
 
 export type ParsedScope = { code: string; title: string; source: string };
 export type ParsedProjectData = {
@@ -212,8 +216,8 @@ export async function ingestProjectDocuments(projectId: string, files: File[]) {
       parsed: ParsedProjectData;
     }> = [];
   for (const file of files.filter((file) => file.size > 0)) {
-    if (file.size > 25 * 1024 * 1024)
-      throw new Response(`${file.name} exceeds the 25 MB prototype limit`, {
+    if (file.size > MAX_PROJECT_DOCUMENT_BYTES)
+      throw new Response(projectDocumentLimitError(file.name), {
         status: 400,
       });
     const bytes = new Uint8Array(await file.arrayBuffer()),
