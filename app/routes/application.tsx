@@ -92,7 +92,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     company: await getCompany(),
     layout: await getLayout(url.searchParams.get("layout")),
     runtime: {
-      version: process.env.APP_VERSION ?? "0.8.0",
+      version: process.env.APP_VERSION ?? "0.8.1",
       buildDate: process.env.BUILD_DATE ?? "Development build",
       environment: "GREENSIGN DEV",
       server: "Online",
@@ -149,13 +149,32 @@ export async function action({ request }: Route.ActionArgs) {
           (value): value is File => value instanceof File && value.size > 0,
         );
       if (files.length) {
-        await ingestProjectDocuments(createdId, files);
-        await runAiAssistant({
-          capability: "project-intake",
-          projectId: createdId,
-          instruction:
-            "Review the newly uploaded project documents, identify facts and scope, and prepare a confirmation draft with source evidence.",
-        });
+        try {
+          await ingestProjectDocuments(createdId, files);
+        } catch (error) {
+          // Intake is atomic: a failed parse must not leave an untitled orphan.
+          await deleteProjects([createdId]);
+          return {
+            ok: false,
+            error: await documentProcessingError(error),
+          };
+        }
+        try {
+          await runAiAssistant({
+            capability: "project-intake",
+            projectId: createdId,
+            instruction:
+              "Review the newly uploaded project documents, identify facts and scope, and prepare a confirmation draft with source evidence.",
+          });
+        } catch (error) {
+          console.error("AI intake review failed after document parsing", error);
+          return {
+            ok: true,
+            createdId,
+            warning:
+              "Documents were stored and parsed. AI review is temporarily unavailable; continue with the confirmation fields.",
+          };
+        }
       }
     }
   } else if (intent === "document-upload") {
@@ -165,14 +184,27 @@ export async function action({ request }: Route.ActionArgs) {
         .filter(
           (value): value is File => value instanceof File && value.size > 0,
         );
-    await ingestProjectDocuments(projectId, files);
+    try {
+      await ingestProjectDocuments(projectId, files);
+    } catch (error) {
+      return { ok: false, error: await documentProcessingError(error) };
+    }
     if (files.length)
-      await runAiAssistant({
-        capability: "project-intake",
-        projectId,
-        instruction:
-          "Merge these newly uploaded documents into the current project review and prepare an updated confirmation draft with source evidence.",
-      });
+      try {
+        await runAiAssistant({
+          capability: "project-intake",
+          projectId,
+          instruction:
+            "Merge these newly uploaded documents into the current project review and prepare an updated confirmation draft with source evidence.",
+        });
+      } catch (error) {
+        console.error("AI document review failed after document parsing", error);
+        return {
+          ok: true,
+          warning:
+            "Documents were stored and parsed. AI review is temporarily unavailable; continue with the confirmation fields.",
+        };
+      }
   } else if (intent === "intake-confirm")
     await confirmProjectIntake(
       String(form.get("projectId")),
@@ -305,6 +337,14 @@ export async function action({ request }: Route.ActionArgs) {
   else throw new Response("Unsupported project action", { status: 400 });
   return { ok: true, createdId };
 }
+async function documentProcessingError(error: unknown) {
+  if (error instanceof Response) {
+    const message = await error.text();
+    if (message.trim()) return message;
+  }
+  console.error("Document processing failed", error);
+  return "Document processing did not complete. No partial files or project were saved. Check the file and try again.";
+}
 function parseIds(value: FormDataEntryValue | null) {
   try {
     const parsed = JSON.parse(String(value ?? "[]"));
@@ -424,11 +464,13 @@ function FeedbackComposer({
   x,
   y,
   page,
+  target,
   onClose,
 }: {
   x: number;
   y: number;
   page: string;
+  target: string;
   onClose: () => void;
 }) {
   const fetcher = useFetcher();
@@ -447,6 +489,8 @@ function FeedbackComposer({
         context: JSON.stringify({
           viewport: `${window.innerWidth}x${window.innerHeight}`,
           url: window.location.href,
+          target,
+          point: { x, y },
         }),
       },
       { method: "post" },
@@ -866,7 +910,11 @@ export default function Application({ loaderData }: Route.ComponentProps) {
     [aiInstruction, setAiInstruction] = useState(""),
     [aiProjectOverride, setAiProjectOverride] = useState<string>(),
     [aiCapabilityOverride, setAiCapabilityOverride] = useState<string>(),
-    [feedbackPoint, setFeedbackPoint] = useState<{ x: number; y: number }>();
+    [feedbackPoint, setFeedbackPoint] = useState<{
+      x: number;
+      y: number;
+      target: string;
+    }>();
   const current = path[0] || "dashboard",
     toolSlug = current === "tools" ? path[1] : undefined,
     settingsSection = current === "settings" ? path[1] : undefined,
@@ -957,7 +1005,25 @@ export default function Application({ loaderData }: Route.ComponentProps) {
       if (target.closest("input,textarea,select,[contenteditable=true]"))
         return;
       event.preventDefault();
-      setFeedbackPoint({ x: event.clientX, y: event.clientY });
+      const control = target.closest(
+          "button,a,[role=button],article,section,th,td",
+        ) as HTMLElement | null,
+        identified = control ?? target,
+        description = [
+          identified.tagName.toLowerCase(),
+          identified.id ? `#${identified.id}` : "",
+          ...[...identified.classList].slice(0, 3).map((name) => `.${name}`),
+          identified.getAttribute("aria-label") ||
+            identified.textContent?.trim().replace(/\s+/g, " ").slice(0, 120) ||
+            "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+      setFeedbackPoint({
+        x: event.clientX,
+        y: event.clientY,
+        target: description,
+      });
     }
     window.addEventListener("contextmenu", capture);
     return () => window.removeEventListener("contextmenu", capture);
@@ -1387,6 +1453,7 @@ export default function Application({ loaderData }: Route.ComponentProps) {
           x={feedbackPoint.x}
           y={feedbackPoint.y}
           page={location.pathname}
+          target={feedbackPoint.target}
           onClose={() => setFeedbackPoint(undefined)}
         />
       )}{" "}

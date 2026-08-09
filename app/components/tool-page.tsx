@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useFetcher, useLoaderData, useLocation } from "react-router";
 import { modules } from "../lib/navigation";
 import type { PartnerRow } from "./projects-page";
@@ -208,6 +208,55 @@ type WorkflowRow = {
 };
 const states = ["draft", "review", "approved", "issued", "closed"];
 
+function ProposalBlocksEditor({
+  recordId,
+  blocks,
+  fetcher,
+}: {
+  recordId: string;
+  blocks: string[];
+  fetcher: ReturnType<typeof useFetcher>;
+}) {
+  const [open, setOpen] = useState(false),
+    [draft, setDraft] = useState(blocks.join("\n"));
+  useEffect(() => {
+    if (!open) setDraft(blocks.join("\n"));
+  }, [blocks, open]);
+  const parsed = draft
+    .split(/\r?\n/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  return (
+    <div className={`proposal-block-editor ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="proposal-block-toggle"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? "CLOSE" : "EDIT"} {parsed.length} PROPOSAL BLOCKS
+      </button>
+      {open && (
+        <textarea
+          aria-label="Proposal blocks"
+          value={draft}
+          placeholder="Add one proposal block per line"
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={() =>
+            fetcher.submit(
+              {
+                intent: "workflow-payload",
+                id: recordId,
+                patch: JSON.stringify({ blocks: parsed }),
+              },
+              { method: "post" },
+            )
+          }
+        />
+      )}
+    </div>
+  );
+}
+
 function liveMetrics(
   slug: string,
   records: WorkflowRow[],
@@ -297,7 +346,7 @@ export function ToolPage({
     [insight, setInsight] = useState(0),
     [metric, setMetric] = useState<number>(),
     [importing, setImporting] = useState(false),
-    toolRecords = useMemo(
+    baseRecords = useMemo(
       () =>
         records.filter(
           (record) =>
@@ -306,14 +355,27 @@ export function ToolPage({
               ? record.projectId === projectId
               : slug === "proposal-designer"
                 ? !record.projectId
-                : true) &&
+                : true),
+        ),
+      [records, slug, projectId],
+    ),
+    toolRecords = useMemo(
+      () =>
+        baseRecords.filter(
+          (record) =>
             `${JSON.stringify(record.payload)} ${record.type}`
               .toLowerCase()
               .includes(search.toLowerCase()) &&
-            (stateFilter === "all" || record.state === stateFilter) &&
+            (stateFilter === "all" ||
+              (stateFilter === "open" && record.state !== "closed") ||
+              (stateFilter === "needs-review" &&
+                ["draft", "review"].includes(record.state)) ||
+              (stateFilter === "confirmed" &&
+                ["approved", "issued", "closed"].includes(record.state)) ||
+              record.state === stateFilter) &&
             (typeFilter === "all" || record.type === typeFilter),
         ),
-      [records, slug, projectId, search, stateFilter, typeFilter],
+      [baseRecords, search, stateFilter, typeFilter],
     ),
     types = [
       ...new Set(
@@ -325,7 +387,7 @@ export function ToolPage({
     projectScopes = records.filter(
       (record) => record.projectId === projectId && record.toolKey === "risk",
     ),
-    metrics = liveMetrics(slug, toolRecords, partners);
+    metrics = liveMetrics(slug, baseRecords, partners);
   if (!projectId && slug !== "proposal-designer")
     return (
       <div className="empty-state">
@@ -376,7 +438,24 @@ export function ToolPage({
           <button
             className={`metric metric-button ${metric === index ? "active" : ""}`}
             key={item[0]}
-            onClick={() => setMetric(index)}
+            onClick={() => {
+              const label = item[0].toLowerCase();
+              setMetric(index);
+              setStateFilter(
+                /published|confirmed|approved|issued|closed/.test(label)
+                  ? "confirmed"
+                  : /review|draft|due|alert|risk|gap/.test(label)
+                    ? "needs-review"
+                    : /open/.test(label)
+                      ? "open"
+                      : "all",
+              );
+              requestAnimationFrame(() =>
+                document
+                  .querySelector(".tool-layout")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+              );
+            }}
           >
             <label>{item[0]}</label>
             <strong>{item[1]}</strong>
@@ -490,6 +569,9 @@ export function ToolPage({
                 onChange={(event) => setStateFilter(event.target.value)}
               >
                 <option value="all">All statuses</option>
+                <option value="open">OPEN</option>
+                <option value="needs-review">NEEDS REVIEW</option>
+                <option value="confirmed">CONFIRMED</option>
                 {states.map((item) => (
                   <option key={item} value={item}>
                     {item.toUpperCase()}
@@ -830,30 +912,11 @@ function LinkedTable({
                     }
                   />
                   {slug === "proposal-designer" && (
-                    <details className="proposal-block-editor">
-                      <summary>
-                        EDIT {payload.blocks?.length ?? 0} PROPOSAL BLOCKS
-                      </summary>
-                      <textarea
-                        defaultValue={(payload.blocks ?? []).join("\n")}
-                        placeholder="Add one proposal block per line"
-                        onBlur={(event) =>
-                          fetcher.submit(
-                            {
-                              intent: "workflow-payload",
-                              id: record.id,
-                              patch: JSON.stringify({
-                                blocks: event.target.value
-                                  .split(/\r?\n/)
-                                  .map((block) => block.trim())
-                                  .filter(Boolean),
-                              }),
-                            },
-                            { method: "post" },
-                          )
-                        }
-                      />
-                    </details>
+                    <ProposalBlocksEditor
+                      recordId={record.id}
+                      blocks={payload.blocks ?? []}
+                      fetcher={fetcher}
+                    />
                   )}
                   <input
                     className="table-edit detail"

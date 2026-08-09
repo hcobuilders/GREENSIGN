@@ -2,9 +2,16 @@
 
 > Connected construction intelligence. Standardized inputs, confirmation-first workflows, reusable outputs.
 
-![Version](https://img.shields.io/badge/version-0.8.0-87ff4f?style=flat-square&labelColor=111512)
+![Version](https://img.shields.io/badge/version-0.8.1-87ff4f?style=flat-square&labelColor=111512)
 ![React Router](https://img.shields.io/badge/React_Router-Framework_Mode-c5cec7?style=flat-square&labelColor=111512)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-79aef2?style=flat-square&labelColor=111512)
+
+## v0.8.1 resilient intake and feedback completion
+
+- Fixed PDF parsing so source bytes remain intact for storage, and made multi-file parsing atomic so failed intakes leave no partial documents or orphan projects.
+- Added a visible multi-file upload queue, actionable inline failure states, safe retry behavior, and persistent parsed source records for drawings and specifications.
+- Completed the current feedback audit with a simplified Projects toolbar, clear Project number language, address-aware custom parameters, connected workflow-metric filters, improved status tags, and environment spacing.
+- Enhanced right-click feedback with the selected interface element and click position so future notes identify their exact target.
 
 ## v0.8.0 approval-first AI assistance
 

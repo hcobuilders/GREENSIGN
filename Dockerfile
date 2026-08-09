@@ -16,7 +16,7 @@ COPY --from=development-dependencies-env /app/node_modules ./node_modules
 RUN pnpm build
 
 FROM base
-ARG APP_VERSION=0.8.0
+ARG APP_VERSION=0.8.1
 ARG BUILD_DATE=unknown
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --from=production-dependencies-env /app/node_modules ./node_modules

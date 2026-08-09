@@ -18,11 +18,13 @@ export function AddressField({
   onChange,
   label = "ADDRESS",
   required = false,
+  submitFields = true,
 }: {
   value?: Partial<StructuredAddress> | string;
   onChange?: (address: StructuredAddress) => void;
   label?: string;
   required?: boolean;
+  submitFields?: boolean;
 }) {
   const initial =
     typeof value === "string"
@@ -73,7 +75,7 @@ export function AddressField({
       <label>
         {label}
         <input
-          name="location"
+          name={submitFields ? "location" : undefined}
           autoComplete="street-address"
           required={required}
           value={address.formatted}
@@ -112,21 +114,21 @@ export function AddressField({
       )}
       <div className="address-parts">
         <input
-          name="street"
+          name={submitFields ? "street" : undefined}
           aria-label={`${label} street`}
           placeholder="Street"
           value={address.street}
           onChange={(event) => updatePart("street", event.target.value)}
         />
         <input
-          name="city"
+          name={submitFields ? "city" : undefined}
           aria-label={`${label} city`}
           placeholder="City"
           value={address.city}
           onChange={(event) => updatePart("city", event.target.value)}
         />
         <input
-          name="addressState"
+          name={submitFields ? "addressState" : undefined}
           aria-label={`${label} state`}
           placeholder="State"
           maxLength={2}
@@ -136,7 +138,7 @@ export function AddressField({
           }
         />
         <input
-          name="zip"
+          name={submitFields ? "zip" : undefined}
           aria-label={`${label} ZIP`}
           placeholder="ZIP"
           value={address.zip}

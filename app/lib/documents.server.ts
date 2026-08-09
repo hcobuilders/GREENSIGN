@@ -27,14 +27,15 @@ const textMimeTypes = new Set([
   "text/xml",
 ]);
 
-async function extractText(file: File, buffer: ArrayBuffer) {
+async function extractText(file: File, bytes: Uint8Array) {
   if (
     file.type === "application/pdf" ||
     file.name.toLowerCase().endsWith(".pdf")
   ) {
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const document = await getDocument({ data: new Uint8Array(buffer) })
-      .promise;
+    // PDF.js may transfer and detach the buffer it receives. Give it an
+    // isolated copy so the original bytes remain available for persistence.
+    const document = await getDocument({ data: bytes.slice() }).promise;
     const pages: string[] = [];
     for (
       let pageNumber = 1;
@@ -53,7 +54,7 @@ async function extractText(file: File, buffer: ArrayBuffer) {
     textMimeTypes.has(file.type) ||
     /\.(txt|csv|json|xml|md)$/i.test(file.name)
   )
-    return new TextDecoder().decode(buffer).slice(0, 500000);
+    return new TextDecoder().decode(bytes).slice(0, 500000);
   return `Document: ${file.name}\nNo embedded text was available. Use the confirmation fields to complete project information.`;
 }
 
@@ -204,33 +205,28 @@ export async function ingestProjectDocuments(projectId: string, files: File[]) {
   if (!project) throw new Response("Project not found", { status: 404 });
   const company = await ensureFoundationCompany(),
     db = getDatabase(),
-    parsedItems: ParsedProjectData[] = [];
+    prepared: Array<{
+      file: File;
+      content: string;
+      text: string;
+      parsed: ParsedProjectData;
+    }> = [];
   for (const file of files.filter((file) => file.size > 0)) {
     if (file.size > 25 * 1024 * 1024)
       throw new Response(`${file.name} exceeds the 25 MB prototype limit`, {
         status: 400,
       });
-    const buffer = await file.arrayBuffer(),
-      text = await extractText(file, buffer),
+    const bytes = new Uint8Array(await file.arrayBuffer()),
+      text = await extractText(file, bytes),
       parsed = parseProjectText(text, file.name);
-    parsedItems.push(parsed);
-    await db.insert(projectDocuments).values({
-      companyId: company.id,
-      projectId,
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-      size: file.size,
-      documentType: /spec/i.test(file.name)
-        ? "specification"
-        : /draw|plan|sheet/i.test(file.name)
-          ? "drawing"
-          : "project-document",
-      content: Buffer.from(buffer).toString("base64"),
-      extractedText: text,
-      parsedData: parsed,
-      status: "parsed",
+    prepared.push({
+      file,
+      content: Buffer.from(bytes).toString("base64"),
+      text,
+      parsed,
     });
   }
+  const parsedItems = prepared.map((item) => item.parsed);
   const currentData = (project.data ?? {}) as Record<string, unknown>,
     currentIntake = (currentData.intake ?? {}) as Record<string, unknown>,
     previousParsed = currentIntake.parsed as ParsedProjectData | undefined,
@@ -250,20 +246,41 @@ export async function ingestProjectDocuments(projectId: string, files: File[]) {
       architect: merged.architect || currentData.architect || "",
       estimatedValue: merged.estimatedValue || currentData.estimatedValue || 0,
     };
-  await db
-    .update(projects)
-    .set({
-      code: merged.projectNumber || project.code,
-      name: merged.projectName || project.name,
-      status: "draft",
-      phase: "document review",
-      dueDate: merged.bidDueDate || project.dueDate,
-      startDate: merged.startDate || project.startDate,
-      completionDate: merged.completionDate || project.completionDate,
-      data,
-      updatedAt: new Date(),
-    })
-    .where(eq(projects.id, projectId));
+  await db.transaction(async (transaction) => {
+    if (prepared.length)
+      await transaction.insert(projectDocuments).values(
+        prepared.map(({ file, content, text, parsed }) => ({
+          companyId: company.id,
+          projectId,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          documentType: /spec/i.test(file.name)
+            ? "specification"
+            : /draw|plan|sheet/i.test(file.name)
+              ? "drawing"
+              : "project-document",
+          content,
+          extractedText: text,
+          parsedData: parsed,
+          status: "parsed",
+        })),
+      );
+    await transaction
+      .update(projects)
+      .set({
+        code: merged.projectNumber || project.code,
+        name: merged.projectName || project.name,
+        status: "draft",
+        phase: "document review",
+        dueDate: merged.bidDueDate || project.dueDate,
+        startDate: merged.startDate || project.startDate,
+        completionDate: merged.completionDate || project.completionDate,
+        data,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, projectId));
+  });
   return merged;
 }
 

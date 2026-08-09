@@ -190,7 +190,11 @@ function DraftApproval({
   details: Record<string, unknown>;
   documents: DocumentRow[];
 }) {
-  const fetcher = useFetcher(),
+  const fetcher = useFetcher<{
+      ok: boolean;
+      error?: string;
+      warning?: string;
+    }>(),
     intake = (details.intake ?? {}) as {
       parsed?: Record<string, unknown>;
       status?: string;
@@ -399,12 +403,24 @@ function DraftApproval({
             <input
               name="documents"
               type="file"
-              accept=".pdf,.txt,.csv,.json,application/pdf,text/plain"
+              accept=".pdf,.txt,application/pdf,text/plain"
               multiple
               required
             />
             <button className="secondary">UPLOAD + REPARSE</button>
           </fetcher.Form>
+          {fetcher.data?.error && (
+            <div className="intake-message error" role="alert">
+              <b>UPLOAD DID NOT COMPLETE</b>
+              <span>{fetcher.data.error}</span>
+            </div>
+          )}
+          {fetcher.data?.warning && (
+            <div className="intake-message warning" role="status">
+              <b>PARSE COMPLETE</b>
+              <span>{fetcher.data.warning}</span>
+            </div>
+          )}
         </section>
       </div>
       <section className="panel parsed-scope">
@@ -702,6 +718,59 @@ function InlineDataField({
   );
 }
 
+function InlineAddressDataField({
+  label,
+  value,
+  onSave,
+}: {
+  label: string;
+  value: unknown;
+  onSave: (value: StructuredAddress) => void;
+}) {
+  const [editing, setEditing] = useState(false),
+    [draft, setDraft] = useState<StructuredAddress>(() =>
+      typeof value === "object" && value
+        ? (value as StructuredAddress)
+        : {
+            formatted: String(value ?? ""),
+            street: "",
+            city: "",
+            state: "",
+            zip: "",
+          },
+    );
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        {editing ? (
+          <span className="custom-address-editor">
+            <AddressField
+              value={draft}
+              onChange={setDraft}
+              submitFields={false}
+            />
+            <button
+              onClick={() => {
+                onSave(draft);
+                setEditing(false);
+              }}
+            >
+              SAVE
+            </button>
+            <button onClick={() => setEditing(false)}>CANCEL</button>
+          </span>
+        ) : (
+          <span className="lead-value">
+            {formatAddress(value, "Not set")}
+            <button onClick={() => setEditing(true)}>EDIT</button>
+          </span>
+        )}
+      </dd>
+    </div>
+  );
+}
+
 function ProjectInformation({
   project,
   details,
@@ -743,7 +812,7 @@ function ProjectInformation({
     customFields = (details.customFields ?? []) as Array<{
       name: string;
       type: string;
-      value: string;
+      value: unknown;
     }>;
   return (
     <aside className="project-information">
@@ -850,27 +919,42 @@ function ProjectInformation({
       {customFields.length > 0 && (
         <div className="custom-info">
           <span>CUSTOM PARAMETERS</span>
-          {customFields.map((field) => (
-            <InlineDataField
-              key={field.name}
-              label={field.name || "Custom field"}
-              type={
-                field.type === "date"
-                  ? "date"
-                  : field.type === "value"
-                    ? "number"
-                    : "text"
-              }
-              value={field.value}
-              onSave={(value) =>
-                saveData({
-                  customFields: customFields.map((item) =>
-                    item === field ? { ...item, value } : item,
-                  ),
-                })
-              }
-            />
-          ))}
+          {customFields.map((field) =>
+            field.type === "address" ? (
+              <InlineAddressDataField
+                key={field.name}
+                label={field.name || "Custom field"}
+                value={field.value}
+                onSave={(value) =>
+                  saveData({
+                    customFields: customFields.map((item) =>
+                      item === field ? { ...item, value } : item,
+                    ),
+                  })
+                }
+              />
+            ) : (
+              <InlineDataField
+                key={field.name}
+                label={field.name || "Custom field"}
+                type={
+                  field.type === "date"
+                    ? "date"
+                    : field.type === "value"
+                      ? "number"
+                      : "text"
+                }
+                value={String(field.value ?? "")}
+                onSave={(value) =>
+                  saveData({
+                    customFields: customFields.map((item) =>
+                      item === field ? { ...item, value } : item,
+                    ),
+                  })
+                }
+              />
+            ),
+          )}
         </div>
       )}
     </aside>
