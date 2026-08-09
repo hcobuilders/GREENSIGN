@@ -7,14 +7,22 @@ import {
 } from "../lib/layout-config";
 import {
   activateLayout,
+  archiveLayout,
+  createEnvironment,
+  createInterfaceMapItem,
   duplicateLayout,
   getLayout,
+  listInterfaceMap,
   listEnvironments,
   listLayouts,
   restoreLayout,
   saveLayout,
+  updateEnvironment,
+  updateInterfaceMapItem,
+  updateLayoutMetadata,
 } from "../lib/layouts.server";
 import { modules } from "../lib/navigation";
+import { createFeedback } from "../lib/feedback.server";
 import type { Route } from "./+types/godmode";
 
 export function meta() {
@@ -24,7 +32,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url),
     layouts = await listLayouts(),
     selected = await getLayout(url.searchParams.get("version"));
-  return { layouts, selected, environments: await listEnvironments() };
+  return {
+    layouts,
+    selected,
+    environments: await listEnvironments(),
+    interfaceMap: await listInterfaceMap(),
+  };
 }
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData(),
@@ -38,8 +51,24 @@ export async function action({ request }: Route.ActionArgs) {
     );
     return { ok: true, createdId: created.id };
   }
+  if (intent === "feedback") {
+    await createFeedback(
+      String(form.get("note") ?? ""),
+      "/gm_RH",
+      JSON.parse(String(form.get("context") ?? "{}")),
+    );
+    return { ok: true };
+  }
   if (intent === "layout-activate")
     await activateLayout(String(form.get("id")));
+  else if (intent === "layout-archive")
+    await archiveLayout(String(form.get("id")));
+  else if (intent === "layout-metadata")
+    await updateLayoutMetadata(
+      String(form.get("id")),
+      String(form.get("family") ?? ""),
+      String(form.get("notes") ?? ""),
+    );
   else if (intent === "layout-restore") {
     const created = await restoreLayout(String(form.get("id")));
     return { ok: true, createdId: created.id };
@@ -49,8 +78,22 @@ export async function action({ request }: Route.ActionArgs) {
       String(form.get("name") ?? ""),
     );
     return { ok: true, createdId: created.id };
-  } else throw new Response("Unsupported Godmode action", { status: 400 });
+  } else if (intent === "environment-create") {
+    await createEnvironment(stringValues(form));
+  } else if (intent === "environment-update")
+    await updateEnvironment(String(form.get("id")), stringValues(form));
+  else if (intent === "map-create") {
+    await createInterfaceMapItem(stringValues(form));
+  } else if (intent === "map-update")
+    await updateInterfaceMapItem(String(form.get("id")), stringValues(form));
+  else throw new Response("Unsupported Godmode action", { status: 400 });
   return { ok: true };
+}
+
+function stringValues(form: FormData) {
+  return Object.fromEntries(
+    [...form.entries()].map(([key, value]) => [key, String(value)]),
+  );
 }
 
 const fonts = [
@@ -61,7 +104,8 @@ const fonts = [
   "Trebuchet MS",
   "Verdana",
 ];
-const colors: [keyof LayoutConfiguration, string][] = [
+type ColorKey = "accent" | "background" | "panel" | "text" | "muted" | "border";
+const colors: [ColorKey, string][] = [
   ["accent", "Accent"],
   ["background", "Background"],
   ["panel", "Panels"],
@@ -93,14 +137,17 @@ function utcTimestamp(value: string | Date) {
 }
 
 export default function Godmode() {
-  const { layouts, selected, environments } = useLoaderData<typeof loader>(),
+  const { layouts, selected, environments, interfaceMap } =
+      useLoaderData<typeof loader>(),
     fetcher = useFetcher<{ ok: boolean; createdId?: string }>(),
     navigate = useNavigate(),
     [config, setConfig] = useState<LayoutConfiguration>(
       normalizeLayout(selected.configuration),
     ),
     [family, setFamily] = useState(selected.family),
-    [notes, setNotes] = useState("");
+    [notes, setNotes] = useState(""),
+    [activePicker, setActivePicker] = useState<string>(),
+    [feedbackPoint, setFeedbackPoint] = useState<{ x: number; y: number }>();
   useEffect(() => {
     setConfig(normalizeLayout(selected.configuration));
     setFamily(selected.family);
@@ -110,6 +157,17 @@ export default function Godmode() {
     if (fetcher.data?.createdId)
       navigate(`/gm_RH?version=${fetcher.data.createdId}`);
   }, [fetcher.data, navigate]);
+  useEffect(() => {
+    function capture(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (target.closest("input,textarea,select,[contenteditable=true]"))
+        return;
+      event.preventDefault();
+      setFeedbackPoint({ x: event.clientX, y: event.clientY });
+    }
+    window.addEventListener("contextmenu", capture);
+    return () => window.removeEventListener("contextmenu", capture);
+  }, []);
   const update = <K extends keyof LayoutConfiguration>(
     key: K,
     value: LayoutConfiguration[K],
@@ -337,6 +395,76 @@ export default function Godmode() {
                 />
               </div>
             </EditorSection>
+            <EditorSection title="SHARED TAGS">
+              <div className="gm-tag-editor">
+                {config.tags.map((tag, index) => (
+                  <div key={`${tag.key}-${index}`}>
+                    <input
+                      aria-label={`Tag ${index + 1} label`}
+                      value={tag.label}
+                      onChange={(event) =>
+                        update(
+                          "tags",
+                          config.tags.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  label: event.target.value.toUpperCase(),
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                    <input
+                      aria-label={`Tag ${index + 1} color`}
+                      type="color"
+                      value={tag.color}
+                      onChange={(event) =>
+                        update(
+                          "tags",
+                          config.tags.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, color: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                    <code>{tag.key}</code>
+                    <button
+                      className="gm-secondary"
+                      onClick={() =>
+                        update(
+                          "tags",
+                          config.tags.filter(
+                            (_, itemIndex) => itemIndex !== index,
+                          ),
+                        )
+                      }
+                    >
+                      REMOVE
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="gm-secondary"
+                  onClick={() => {
+                    const index = config.tags.length + 1;
+                    update("tags", [
+                      ...config.tags,
+                      {
+                        key: `custom-${index}`,
+                        label: `CUSTOM ${index}`,
+                        color: config.accent,
+                      },
+                    ]);
+                  }}
+                >
+                  + ADD TAG
+                </button>
+              </div>
+            </EditorSection>
             <EditorSection title="TOOL WORKSPACES">
               <div className="gm-tool-layouts">
                 {modules.map((module) => (
@@ -366,27 +494,53 @@ export default function Godmode() {
               <div
                 className={`gm-preview-canvas ${config.headingsUppercase ? "uppercase" : ""}`}
               >
-                <div className="gm-preview-nav">
+                <PreviewElement
+                  id="navigation"
+                  label="Navigation"
+                  active={activePicker}
+                  setActive={setActivePicker}
+                  config={config}
+                  update={update}
+                  className="gm-preview-nav"
+                >
                   GREENSIGN <span>Dashboard</span>
                   <span>Projects</span>
                   <button>QUICK ADD</button>
-                </div>
+                </PreviewElement>
                 <div className="gm-preview-body">
-                  <small>PROJECT</small>
-                  <h2>INTERFACE PREVIEW</h2>
-                  {config.showSubtitles && (
-                    <p>
-                      Changes are previewed here before a version is saved or
-                      activated.
-                    </p>
-                  )}
+                  <PreviewElement
+                    id="heading"
+                    label="Heading + text"
+                    active={activePicker}
+                    setActive={setActivePicker}
+                    config={config}
+                    update={update}
+                  >
+                    <small>PROJECT</small>
+                    <h2>INTERFACE PREVIEW</h2>
+                    {config.showSubtitles && (
+                      <p>
+                        Click any outlined preview element to edit its colors
+                        directly in context.
+                      </p>
+                    )}
+                  </PreviewElement>
                   <div className="gm-preview-cards">
                     {[1, 2, 3].map((item) => (
-                      <article key={item}>
+                      <PreviewElement
+                        as="article"
+                        id={`card-${item}`}
+                        label={`Card ${item}`}
+                        key={item}
+                        active={activePicker}
+                        setActive={setActivePicker}
+                        config={config}
+                        update={update}
+                      >
                         <b>CARD {item}</b>
                         <strong>{item * 12}</strong>
                         <button>OPEN</button>
-                      </article>
+                      </PreviewElement>
                     ))}
                   </div>
                 </div>
@@ -415,6 +569,29 @@ export default function Godmode() {
                   </h3>
                   <p>{item.notes || "Saved layout iteration"}</p>
                   <small>{utcTimestamp(item.createdAt)}</small>
+                  <details className="gm-inline-editor">
+                    <summary>EDIT VERSION DETAILS</summary>
+                    <form method="post">
+                      <input
+                        type="hidden"
+                        name="intent"
+                        value="layout-metadata"
+                      />
+                      <input type="hidden" name="id" value={item.id} />
+                      <label>
+                        FAMILY
+                        <input name="family" defaultValue={item.family} />
+                      </label>
+                      <label>
+                        NOTES
+                        <textarea
+                          name="notes"
+                          defaultValue={item.notes ?? ""}
+                        />
+                      </label>
+                      <button className="gm-secondary">SAVE DETAILS</button>
+                    </form>
+                  </details>
                 </div>
                 <div>
                   <Link to={`/app/dashboard?layout=${item.id}`}>PREVIEW</Link>
@@ -443,6 +620,15 @@ export default function Godmode() {
                   >
                     DUPLICATE
                   </button>
+                  {item.status !== "active" && (
+                    <button
+                      onClick={() =>
+                        submit({ intent: "layout-archive", id: item.id })
+                      }
+                    >
+                      ARCHIVE
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
@@ -457,12 +643,91 @@ export default function Godmode() {
           </div>
           <div className="gm-environments">
             {environments.map((environment) => (
-              <article key={environment.id}>
-                <h3>{environment.name}</h3>
-                <code>{environment.slug}.greensign.app</code>
-                <Link to="/app/dashboard">OPEN ENVIRONMENT →</Link>
-              </article>
+              <form method="post" key={environment.id}>
+                <input type="hidden" name="intent" value="environment-update" />
+                <input type="hidden" name="id" value={environment.id} />
+                <label>
+                  NAME
+                  <input name="name" defaultValue={environment.name} />
+                </label>
+                <label>
+                  SLUG
+                  <input name="slug" defaultValue={environment.slug} />
+                </label>
+                <label>
+                  LABEL
+                  <input name="label" defaultValue={environment.label} />
+                </label>
+                <label>
+                  STATUS
+                  <select name="status" defaultValue={environment.status}>
+                    <option value="active">ACTIVE</option>
+                    <option value="preview">PREVIEW</option>
+                    <option value="suspended">SUSPENDED</option>
+                  </select>
+                </label>
+                <label>
+                  ACCENT
+                  <input
+                    name="accent"
+                    type="color"
+                    defaultValue={environment.accent}
+                  />
+                </label>
+                <label>
+                  ENVIRONMENT URL
+                  <input name="url" defaultValue={environment.url} />
+                </label>
+                <label>
+                  NOTES
+                  <textarea
+                    name="notes"
+                    defaultValue={environment.notes ?? ""}
+                  />
+                </label>
+                <div className="gm-form-actions">
+                  <button className="gm-secondary">SAVE ENVIRONMENT</button>
+                  <a href={environment.url || "/app/dashboard"}>OPEN →</a>
+                </div>
+              </form>
             ))}
+            <form method="post" className="gm-new-card">
+              <input type="hidden" name="intent" value="environment-create" />
+              <h3>NEW ENVIRONMENT</h3>
+              <label>
+                NAME
+                <input name="name" required />
+              </label>
+              <label>
+                SLUG
+                <input name="slug" required />
+              </label>
+              <label>
+                LABEL
+                <input name="label" defaultValue="Preview" />
+              </label>
+              <label>
+                STATUS
+                <select name="status" defaultValue="preview">
+                  <option value="active">ACTIVE</option>
+                  <option value="preview">PREVIEW</option>
+                  <option value="suspended">SUSPENDED</option>
+                </select>
+              </label>
+              <label>
+                ACCENT
+                <input name="accent" type="color" defaultValue="#87ff4f" />
+              </label>
+              <label>
+                ENVIRONMENT URL
+                <input name="url" placeholder="https://…" />
+              </label>
+              <label>
+                NOTES
+                <textarea name="notes" />
+              </label>
+              <button className="gm-primary">CREATE ENVIRONMENT</button>
+            </form>
           </div>
         </section>
         <section className="gm-library" id="map">
@@ -472,21 +737,152 @@ export default function Godmode() {
               <h2>INTERFACE MAP</h2>
             </div>
           </div>
-          <div className="gm-map">
-            <b>GLOBAL FRAME</b>
-            <span>
-              Navigation · command bar · typography · colors · spacing
-            </span>
-            <b>PROJECT FRAME</b>
-            <span>Tool rail · workspace · information pane · tables</span>
-            <b>DASHBOARD</b>
-            <span>Metrics · project cards · card controls · activity</span>
-            <b>TOOLS</b>
-            <span>{modules.map((item) => item[2]).join(" · ")}</span>
+          <div className="gm-map-editor">
+            {interfaceMap.map((item) => (
+              <form method="post" key={item.id}>
+                <input type="hidden" name="intent" value="map-update" />
+                <input type="hidden" name="id" value={item.id} />
+                <label>
+                  LABEL
+                  <input name="label" defaultValue={item.label} />
+                </label>
+                <label>
+                  GROUP
+                  <input name="group" defaultValue={item.group} />
+                </label>
+                <label>
+                  REGION
+                  <select name="region" defaultValue={item.region}>
+                    <option value="topbar">TOP BAR</option>
+                    <option value="workspace">WORKSPACE</option>
+                    <option value="bottombar">BOTTOM BAR</option>
+                    <option value="popover">POPOVER</option>
+                    <option value="drawer">DRAWER</option>
+                  </select>
+                </label>
+                <label>
+                  ROUTE
+                  <input name="route" defaultValue={item.route} />
+                </label>
+                <label>
+                  NOTES
+                  <input name="notes" defaultValue={item.notes ?? ""} />
+                </label>
+                <label className="gm-check">
+                  <input
+                    name="enabled"
+                    type="checkbox"
+                    value="true"
+                    defaultChecked={item.enabled}
+                  />{" "}
+                  ENABLED
+                </label>
+                <div className="gm-form-actions">
+                  <button className="gm-secondary">SAVE MAP ITEM</button>
+                  <a href={item.route}>OPEN ROUTE →</a>
+                </div>
+              </form>
+            ))}
+            <form method="post" className="gm-new-card">
+              <input type="hidden" name="intent" value="map-create" />
+              <h3>NEW INTERFACE ITEM</h3>
+              <label>
+                KEY
+                <input name="key" required />
+              </label>
+              <label>
+                LABEL
+                <input name="label" required />
+              </label>
+              <label>
+                GROUP
+                <input name="group" defaultValue="Custom" />
+              </label>
+              <label>
+                REGION
+                <select name="region" defaultValue="workspace">
+                  <option value="topbar">TOP BAR</option>
+                  <option value="workspace">WORKSPACE</option>
+                  <option value="bottombar">BOTTOM BAR</option>
+                  <option value="popover">POPOVER</option>
+                  <option value="drawer">DRAWER</option>
+                </select>
+              </label>
+              <label>
+                ROUTE
+                <input name="route" defaultValue="/app/dashboard" />
+              </label>
+              <label>
+                NOTES
+                <input name="notes" />
+              </label>
+              <input type="hidden" name="enabled" value="true" />
+              <button className="gm-primary">ADD INTERFACE ITEM</button>
+            </form>
           </div>
         </section>
       </main>
+      {feedbackPoint && (
+        <GodmodeFeedback
+          point={feedbackPoint}
+          close={() => setFeedbackPoint(undefined)}
+        />
+      )}
     </div>
+  );
+}
+function GodmodeFeedback({
+  point,
+  close,
+}: {
+  point: { x: number; y: number };
+  close: () => void;
+}) {
+  const fetcher = useFetcher(),
+    [note, setNote] = useState("");
+  return (
+    <form
+      className="feedback-composer gm-feedback"
+      style={{
+        left: Math.max(8, Math.min(point.x, window.innerWidth - 360)),
+        top: Math.max(8, Math.min(point.y, window.innerHeight - 220)),
+      }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        fetcher.submit(
+          {
+            intent: "feedback",
+            note,
+            context: JSON.stringify({
+              viewport: `${window.innerWidth}x${window.innerHeight}`,
+              url: window.location.href,
+              surface: "Godmode",
+            }),
+          },
+          { method: "post" },
+        );
+        close();
+      }}
+    >
+      <div className="eyebrow">FLAG GODMODE ITEM</div>
+      <textarea
+        autoFocus
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        placeholder="Describe the interface change…"
+      />
+      <div className="feedback-meta">
+        Godmode route, viewport, and timestamp will be attached.
+      </div>
+      <div className="dialog-actions">
+        <button type="button" className="gm-secondary" onClick={close}>
+          CANCEL
+        </button>
+        <button className="gm-primary" disabled={!note.trim()}>
+          SAVE NOTE
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -502,6 +898,65 @@ function EditorSection({
       <h2>{title}</h2>
       {children}
     </section>
+  );
+}
+function PreviewElement({
+  as = "div",
+  id,
+  label,
+  active,
+  setActive,
+  config,
+  update,
+  className,
+  children,
+}: {
+  as?: "div" | "article";
+  id: string;
+  label: string;
+  active?: string;
+  setActive: (value?: string) => void;
+  config: LayoutConfiguration;
+  update: (key: ColorKey, value: string) => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  const Tag = as;
+  return (
+    <Tag
+      className={`${className ?? ""} gm-preview-editable ${active === id ? "selected" : ""}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        setActive(id);
+      }}
+    >
+      <span className="gm-preview-label">EDIT {label.toUpperCase()}</span>
+      {children}
+      {active === id && (
+        <div
+          className="gm-inline-palette"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <header>
+            <b>{label.toUpperCase()}</b>
+            <button type="button" onClick={() => setActive(undefined)}>
+              ×
+            </button>
+          </header>
+          {colors.map(([key, colorLabel]) => (
+            <label key={key}>
+              <input
+                type="color"
+                value={String(config[key])}
+                onChange={(event) => update(key, event.target.value as never)}
+              />
+              <span>{colorLabel}</span>
+              <code>{String(config[key])}</code>
+            </label>
+          ))}
+        </div>
+      )}
+    </Tag>
   );
 }
 function Range({

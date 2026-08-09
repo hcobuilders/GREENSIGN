@@ -1,36 +1,539 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate } from "react-router";
+import { AddressField } from "./address-field";
 import { ProjectWorkspace } from "./project-workspace";
 
-export type ProjectRow = { id:string; code:string; name:string; status:string; phase:string; owner:string; startDate:string|null; dueDate:string|null; completionDate:string|null; data:unknown };
-type WorkflowRow = { id:string; projectId:string|null; toolKey:string; type:string; state:string; revision:number; payload:unknown };
-const statuses = ["planning", "bidding", "pricing", "active", "on hold", "complete"];
+export type ProjectRow = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+  phase: string;
+  owner: string;
+  startDate: string | null;
+  dueDate: string | null;
+  completionDate: string | null;
+  data: unknown;
+};
+export type WorkflowRow = {
+  id: string;
+  projectId: string | null;
+  toolKey: string;
+  type: string;
+  state: string;
+  revision: number;
+  payload: unknown;
+};
+export type DocumentRow = {
+  id: string;
+  projectId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  documentType: string;
+  extractedText: string;
+  parsedData: unknown;
+  status: string;
+  createdAt: string | Date;
+};
+export type PartnerRow = {
+  id: string;
+  name: string;
+  status: string;
+  primaryTrade: string;
+  email: string;
+  phone: string;
+  licenseNumber: string;
+  licenseState: string;
+  licenseExpires: string | null;
+  address: unknown;
+  prequalification: unknown;
+  pastProjects: unknown;
+  notes: string;
+};
+const statuses = [
+  "draft",
+  "planning",
+  "bidding",
+  "pricing",
+  "active",
+  "on hold",
+  "complete",
+];
 const textFields = ["code", "name", "phase", "owner"] as const;
 const dateFields = ["startDate", "dueDate", "completionDate"] as const;
-const projectTemplate = "code,name,status,phase,owner,startDate,dueDate,completionDate\n26-020,Example Project,planning,preconstruction,Unassigned,2026-09-01,2026-10-01,2027-12-31";
 
-export function ProjectsPage({ projects, records, onImport }: { projects:ProjectRow[]; records:WorkflowRow[]; onImport:()=>void }) {
-  const fetcher = useFetcher<{ok:boolean;createdId?:string}>(), location = useLocation(), navigate = useNavigate();
-  const [query, setQuery] = useState(""), [status, setStatus] = useState("all"), [selected, setSelected] = useState<Set<string>>(new Set()), [bulkStatus, setBulkStatus] = useState("active"), [creating, setCreating] = useState(new URLSearchParams(location.search).get("create") === "1");
-  const filtered = useMemo(() => projects.filter((project) => (status === "all" || project.status === status) && `${project.code} ${project.name} ${project.owner} ${project.phase}`.toLowerCase().includes(query.toLowerCase())), [projects, query, status]);
-  const allSelected = filtered.length > 0 && filtered.every((project) => selected.has(project.id));
-  const submit = (data:Record<string,string>) => fetcher.submit(data, { method:"post" });
-  const openProject = projects.find((project) => project.id === location.pathname.split("/")[3]);
-  useEffect(() => { if (fetcher.data?.createdId) { setCreating(false); navigate(`/app/projects/${fetcher.data.createdId}`); } }, [fetcher.data, navigate]);
-  if (openProject) return <ProjectWorkspace project={openProject} records={records}/>;
-  function toggle(id:string) { setSelected((current) => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
-  function toggleAll() { setSelected((current) => { const next = new Set(current); filtered.forEach((project) => allSelected ? next.delete(project.id) : next.add(project.id)); return next; }); }
-  function bulk(intent:"bulk-update"|"delete") { if (intent === "delete" && !window.confirm(`Delete ${selected.size} selected project${selected.size === 1 ? "" : "s"}?`)) return; submit({ intent, ids:JSON.stringify([...selected]), status:bulkStatus }); setSelected(new Set()); }
-  return <section className="projects-view">
-    <div className="filter-bar"><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects, codes, leads, or phases…" aria-label="Search projects"/><select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter project status"><option value="all">All statuses</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select><span className="result-count">{filtered.length} PROJECTS</span></div>
-    <div className="bulk-bar"><span>{selected.size} SELECTED</span><select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)}>{statuses.map((item) => <option key={item}>{item}</option>)}</select><button className="secondary" disabled={!selected.size} onClick={() => bulk("bulk-update")}>APPLY STATUS</button><button className="danger-button" disabled={!selected.size} onClick={() => bulk("delete")}>DELETE</button><button className="secondary" onClick={onImport}>IMPORT CSV</button><a className="secondary" download="projects-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(projectTemplate)}`}>CSV TEMPLATE</a><button className="primary" onClick={() => setCreating(true)}>+ NEW PROJECT</button></div>
-    <div className="table-wrap"><table className="projects-table"><thead><tr><th><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all filtered projects"/></th><th>Open</th><th>Code</th><th>Project</th><th>Status</th><th>Phase</th><th>Project lead</th><th>Start</th><th>Bid / Due</th><th>Completion</th></tr></thead><tbody>{filtered.map((project) => <ProjectTableRow key={project.id} project={project} checked={selected.has(project.id)} onToggle={() => toggle(project.id)} submit={submit}/>)}</tbody></table>{!filtered.length && <div className="table-empty">No projects match the current filters.</div>}</div>
-    {fetcher.state !== "idle" && <div className="saving-indicator">SAVING…</div>}{creating && <NewProjectDrawer fetcher={fetcher} close={() => setCreating(false)}/>}</section>;
+export function ProjectsPage({
+  projects,
+  records,
+  documents,
+  partners,
+}: {
+  projects: ProjectRow[];
+  records: WorkflowRow[];
+  documents: DocumentRow[];
+  partners: PartnerRow[];
+}) {
+  const fetcher = useFetcher<{ ok: boolean; createdId?: string }>(),
+    location = useLocation(),
+    navigate = useNavigate(),
+    params = new URLSearchParams(location.search);
+  const [query, setQuery] = useState(""),
+    [status, setStatus] = useState(params.get("status") ?? "all"),
+    [selected, setSelected] = useState<Set<string>>(new Set()),
+    [bulkStatus, setBulkStatus] = useState("active"),
+    [creating, setCreating] = useState(params.get("create") === "1"),
+    [customFields, setCustomFields] = useState<
+      Array<{ name: string; type: string; value: string }>
+    >([]);
+  const filtered = useMemo(
+      () =>
+        projects.filter(
+          (project) =>
+            (status === "all" || project.status === status) &&
+            `${project.code} ${project.name} ${project.owner} ${project.phase}`
+              .toLowerCase()
+              .includes(query.toLowerCase()),
+        ),
+      [projects, query, status],
+    ),
+    allSelected =
+      filtered.length > 0 &&
+      filtered.every((project) => selected.has(project.id)),
+    openProject = projects.find(
+      (project) => project.id === location.pathname.split("/")[3],
+    );
+  const submit = (data: Record<string, string>) =>
+    fetcher.submit(data, { method: "post" });
+  useEffect(() => {
+    if (fetcher.data?.createdId) {
+      setCreating(false);
+      navigate(`/app/projects/${fetcher.data.createdId}`);
+    }
+  }, [fetcher.data, navigate]);
+  if (openProject)
+    return (
+      <ProjectWorkspace
+        project={openProject}
+        records={records}
+        documents={documents.filter(
+          (document) => document.projectId === openProject.id,
+        )}
+        partners={partners}
+      />
+    );
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function toggleAll() {
+    setSelected((current) => {
+      const next = new Set(current);
+      filtered.forEach((project) =>
+        allSelected ? next.delete(project.id) : next.add(project.id),
+      );
+      return next;
+    });
+  }
+  function bulk(intent: "bulk-update" | "delete") {
+    if (
+      intent === "delete" &&
+      !window.confirm(
+        `Delete ${selected.size} selected project${selected.size === 1 ? "" : "s"}?`,
+      )
+    )
+      return;
+    submit({ intent, ids: JSON.stringify([...selected]), status: bulkStatus });
+    setSelected(new Set());
+  }
+  return (
+    <section className="projects-view">
+      <div className="filter-bar">
+        <input
+          className="search-input"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search projects, codes, leads, or phases…"
+          aria-label="Search projects"
+        />
+        <select
+          value={status}
+          onChange={(event) => {
+            setStatus(event.target.value);
+            navigate(
+              event.target.value === "all"
+                ? "/app/projects"
+                : `/app/projects?status=${encodeURIComponent(event.target.value)}`,
+              { replace: true },
+            );
+          }}
+          aria-label="Filter project status"
+        >
+          <option value="all">All statuses</option>
+          {statuses.map((item) => (
+            <option key={item} value={item}>
+              {item.toUpperCase()}
+            </option>
+          ))}
+        </select>
+        <span className="result-count">{filtered.length} PROJECTS</span>
+      </div>
+      <div className="bulk-bar">
+        <span>{selected.size} SELECTED</span>
+        <select
+          value={bulkStatus}
+          onChange={(event) => setBulkStatus(event.target.value)}
+        >
+          {statuses.map((item) => (
+            <option key={item} value={item}>
+              {item.toUpperCase()}
+            </option>
+          ))}
+        </select>
+        <button
+          className="secondary"
+          disabled={!selected.size}
+          onClick={() => bulk("bulk-update")}
+        >
+          APPLY STATUS
+        </button>
+        <button
+          className="danger-button"
+          disabled={!selected.size}
+          onClick={() => bulk("delete")}
+        >
+          DELETE
+        </button>
+        <button className="secondary" onClick={() => setCreating(true)}>
+          IMPORT DRAWINGS + SPECS
+        </button>
+        <button className="primary" onClick={() => setCreating(true)}>
+          + NEW PROJECT
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table className="projects-table">
+          <thead>
+            <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  aria-label="Select all filtered projects"
+                />
+              </th>
+              <th>Open</th>
+              <th>Code</th>
+              <th>Project</th>
+              <th>Status</th>
+              <th>Phase</th>
+              <th>Project lead</th>
+              <th>Start</th>
+              <th>Bid / Due</th>
+              <th>Completion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((project) => (
+              <ProjectTableRow
+                key={project.id}
+                project={project}
+                checked={selected.has(project.id)}
+                onToggle={() => toggle(project.id)}
+                submit={submit}
+              />
+            ))}
+          </tbody>
+        </table>
+        {!filtered.length && (
+          <div className="table-empty">
+            No projects match the selected status and search.
+          </div>
+        )}
+      </div>
+      {fetcher.state !== "idle" && (
+        <div className="saving-indicator">SAVING…</div>
+      )}
+      {creating && (
+        <div className="drawer-backdrop" onMouseDown={() => setCreating(false)}>
+          <fetcher.Form
+            className="project-drawer intake-drawer"
+            method="post"
+            encType="multipart/form-data"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <input type="hidden" name="intent" value="project-intake" />
+            <input
+              type="hidden"
+              name="customFields"
+              value={JSON.stringify(customFields)}
+            />
+            <div className="drawer-head">
+              <div>
+                <span className="eyebrow">DRAFT PROJECT INTAKE</span>
+                <h2>CREATE + PARSE PROJECT</h2>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setCreating(false)}
+              >
+                CLOSE
+              </button>
+            </div>
+            <div className="intake-steps">
+              <span>01 PROJECT</span>
+              <span>02 DOCUMENTS</span>
+              <span>03 PARSE</span>
+              <span>04 CONFIRM</span>
+            </div>
+            <div className="drawer-grid">
+              <label>
+                PROJECT NUMBER
+                <input
+                  name="code"
+                  placeholder="Optional — parsed from documents"
+                />
+              </label>
+              <label>
+                PROJECT NAME
+                <input
+                  name="name"
+                  placeholder="Optional — parsed from documents"
+                />
+              </label>
+              <label>
+                PROJECT LEAD
+                <input name="owner" placeholder="Unassigned" />
+              </label>
+              <label>
+                PHASE
+                <input name="phase" defaultValue="document review" />
+              </label>
+              <AddressField label="PROJECT ADDRESS" />
+              <label className="wide document-upload">
+                DRAWINGS + SPECIFICATIONS
+                <input
+                  name="documents"
+                  type="file"
+                  accept=".pdf,.txt,.csv,.json,application/pdf,text/plain"
+                  multiple
+                />
+                <span>
+                  Upload PDF drawing sets, specifications, addenda, or text
+                  schedules. Each file is stored, parsed, and held for
+                  confirmation.
+                </span>
+              </label>
+            </div>
+            <section className="custom-fields">
+              <div className="panel-head">
+                <div>
+                  <h2>CUSTOM PARAMETERS</h2>
+                  <span className="panel-caption">
+                    Add project-specific fields that persist with the project.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    setCustomFields((current) => [
+                      ...current,
+                      { name: "", type: "text", value: "" },
+                    ])
+                  }
+                >
+                  + ADD PARAMETER
+                </button>
+              </div>
+              {customFields.map((field, index) => (
+                <div className="custom-field-row" key={index}>
+                  <input
+                    aria-label="Parameter name"
+                    placeholder="Parameter name"
+                    value={field.name}
+                    onChange={(event) =>
+                      setCustomFields((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, name: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                  <select
+                    aria-label="Parameter type"
+                    value={field.type}
+                    onChange={(event) =>
+                      setCustomFields((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, type: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    {["text", "date", "value", "address", "other"].map(
+                      (type) => (
+                        <option key={type}>{type}</option>
+                      ),
+                    )}
+                  </select>
+                  <input
+                    aria-label="Parameter value"
+                    type={
+                      field.type === "date"
+                        ? "date"
+                        : field.type === "value"
+                          ? "number"
+                          : "text"
+                    }
+                    value={field.value}
+                    onChange={(event) =>
+                      setCustomFields((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, value: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() =>
+                      setCustomFields((current) =>
+                        current.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                  >
+                    REMOVE
+                  </button>
+                </div>
+              ))}
+            </section>
+            <div className="drawer-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setCreating(false)}
+              >
+                CANCEL
+              </button>
+              <button className="primary" disabled={fetcher.state !== "idle"}>
+                {fetcher.state !== "idle"
+                  ? "PARSING DOCUMENTS…"
+                  : "CREATE DRAFT + PARSE"}
+              </button>
+            </div>
+          </fetcher.Form>
+        </div>
+      )}
+    </section>
+  );
 }
 
-function ProjectTableRow({ project, checked, onToggle, submit }: { project:ProjectRow; checked:boolean; onToggle:()=>void; submit:(data:Record<string,string>)=>void }) {
-  const update = (field:string,value:string) => submit({ intent:"update", id:project.id, field, value });
-  return <tr className={checked ? "selected" : ""}><td><input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${project.name}`}/></td><td><Link className="secondary table-open" to={`/app/projects/${project.id}`}>OPEN</Link></td>{textFields.slice(0,2).map((field) => <td key={field}><input className={`cell-input ${field}`} defaultValue={project[field]} onBlur={(event) => event.target.value !== project[field] && update(field,event.target.value)}/></td>)}<td><select className="cell-select status-value" value={project.status} onChange={(event) => update("status",event.target.value)}>{statuses.map((item) => <option key={item}>{item}</option>)}</select></td>{textFields.slice(2).map((field) => <td key={field}><input className="cell-input" defaultValue={project[field]} onBlur={(event) => event.target.value !== project[field] && update(field,event.target.value)}/></td>)}{dateFields.map((field) => <td key={field}><input className="date-input" type="date" value={project[field] ?? ""} onChange={(event) => update(field,event.target.value)}/></td>)}</tr>;
+function ProjectTableRow({
+  project,
+  checked,
+  onToggle,
+  submit,
+}: {
+  project: ProjectRow;
+  checked: boolean;
+  onToggle: () => void;
+  submit: (data: Record<string, string>) => void;
+}) {
+  const update = (field: string, value: string) =>
+      submit({ intent: "update", id: project.id, field, value }),
+    keyboard = (
+      event: React.KeyboardEvent<HTMLInputElement>,
+      value: string,
+    ) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+      if (event.key === "Escape") {
+        event.currentTarget.value = value;
+        event.currentTarget.blur();
+      }
+    };
+  return (
+    <tr className={checked ? "selected" : ""}>
+      <td>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          aria-label={`Select ${project.name}`}
+        />
+      </td>
+      <td>
+        <Link
+          className="secondary table-open"
+          to={`/app/projects/${project.id}`}
+        >
+          OPEN
+        </Link>
+      </td>
+      {textFields.slice(0, 2).map((field) => (
+        <td key={field}>
+          <input
+            className={`cell-input ${field}`}
+            defaultValue={project[field]}
+            onKeyDown={(event) => keyboard(event, project[field])}
+            onBlur={(event) =>
+              event.target.value !== project[field] &&
+              update(field, event.target.value)
+            }
+          />
+        </td>
+      ))}
+      <td>
+        <select
+          className="cell-select status-value"
+          value={project.status}
+          onChange={(event) => update("status", event.target.value)}
+        >
+          {statuses.map((item) => (
+            <option key={item} value={item}>
+              {item.toUpperCase()}
+            </option>
+          ))}
+        </select>
+      </td>
+      {textFields.slice(2).map((field) => (
+        <td key={field}>
+          <input
+            className="cell-input"
+            defaultValue={project[field]}
+            onKeyDown={(event) => keyboard(event, project[field])}
+            onBlur={(event) =>
+              event.target.value !== project[field] &&
+              update(field, event.target.value)
+            }
+          />
+        </td>
+      ))}
+      {dateFields.map((field) => (
+        <td key={field}>
+          <input
+            className="date-input"
+            type="date"
+            value={project[field] ?? ""}
+            onChange={(event) => update(field, event.target.value)}
+          />
+        </td>
+      ))}
+    </tr>
+  );
 }
-
-function NewProjectDrawer({ fetcher, close }: { fetcher:ReturnType<typeof useFetcher<{ok:boolean;createdId?:string}>>; close:()=>void }) { return <div className="drawer-backdrop" onMouseDown={close}><form className="project-drawer" onSubmit={(event) => { event.preventDefault(); fetcher.submit(new FormData(event.currentTarget),{method:"post"}); }} onMouseDown={(event) => event.stopPropagation()}><input type="hidden" name="intent" value="create-manual"/><div className="drawer-head"><div><span className="eyebrow">NEW PROJECT</span><h2>CREATE PROJECT</h2></div><button type="button" className="secondary" onClick={close}>CLOSE</button></div><div className="drawer-grid"><label>PROJECT NUMBER<input name="code" required placeholder="26-020"/></label><label>PROJECT NAME<input name="name" required/></label><label>STATUS<select name="status">{statuses.map((item) => <option key={item}>{item}</option>)}</select></label><label>PHASE<input name="phase" defaultValue="preconstruction"/></label><label>PROJECT LEAD<input name="owner" placeholder="Unassigned"/></label><label>PROJECT OWNER<input name="projectOwner"/></label><label className="wide">LOCATION<input name="location"/></label><label>ARCHITECT<input name="architect"/></label><label>SIZE (SF)<input name="sizeSf" type="number" min="0"/></label><label>START DATE<input name="startDate" type="date"/></label><label>BID / DUE DATE<input name="dueDate" type="date"/></label><label>COMPLETION DATE<input name="completionDate" type="date"/></label><label>ANTICIPATED VALUE<input name="anticipatedValue" type="number" min="0"/></label><label>ESTIMATED VALUE<input name="estimatedValue" type="number" min="0"/></label><label>PROPOSED VALUE<input name="proposedValue" type="number" min="0"/></label><label className="wide">DESCRIPTION<textarea name="description"/></label></div><div className="drawer-actions"><button type="button" className="secondary" onClick={close}>CANCEL</button><button className="primary" disabled={fetcher.state !== "idle"}>{fetcher.state !== "idle" ? "CREATING…" : "CREATE PROJECT"}</button></div></form></div>; }
